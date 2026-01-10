@@ -41,6 +41,7 @@ glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 float yaw   = -90.0f; 
 float pitch =  0.0f;
 float constantSpeed = 100.0f; 
+float cameraSpeed = 5000.0f;
 
 //* Mouse Cursor Control
 bool firstMouse = true;
@@ -62,20 +63,51 @@ float universeScale = 5000.0f;
 glm::vec3 sunPos = universeOrigin; 
 float sunScale = 1000.0f;
 
+glm::vec3 mercuryPos = glm::vec3(3000.0f, 0.0f, 0.0f);
+float mercuryScale = 38.0f; 
+float mercuryOrbitRadius = 3000.0f; 
+float mercuryOrbitSpeed = 0.83f;
+
+glm::vec3 venusPos = glm::vec3(4000.0f, 0.0f, 0.0f);
+float venusScale = 95.0f; 
+float venusOrbitRadius = 4000.0f; 
+float venusOrbitSpeed = 0.32f;
+
 glm::vec3 earthPos = glm::vec3(5000.0f, 0.0f, 0.0f);
 float earthScale = 100.0f; 
 float earthOrbitRadius = 5000.0f; 
-float earthOrbitSpeed = 0.2f;
+float earthOrbitSpeed = 0.1f;
 
 glm::vec3 moonPos = glm::vec3(5250.0f, 0.0f, 0.0f);
 float moonScale = 20.0f; 
 float moonOrbitRadius = 370.0f; 
 float moonOrbitSpeed = 0.8f;
 
-glm::vec3 mercuryPos = glm::vec3(3000.0f, 0.0f, 0.0f);
-float mercuryScale = 400.0f; 
-float mercuryOrbitRadius = 3000.0f; 
-float mercuryOrbitSpeed = 0.8f;
+glm::vec3 marsPos = glm::vec3(6000.0f, 0.0f, 0.0f);
+float marsScale = 53.0f; 
+float marsOrbitRadius = 6000.0f; 
+float marsOrbitSpeed = 0.32f;
+
+glm::vec3 jupiterPos = glm::vec3(9000.0f, 0.0f, 0.0f);
+float jupiterScale = 700.0f; 
+float jupiterOrbitRadius = 9000.0f; 
+float jupiterOrbitSpeed = 0.08f;
+
+glm::vec3 saturnPos = glm::vec3(12000.0f, 0.0f, 0.0f);
+float saturnScale = 550.0f; 
+float saturnOrbitRadius = 12000.0f; 
+float saturnOrbitSpeed = 0.03f;
+
+glm::vec3 uranusPos = glm::vec3(14000.0f, 0.0f, 0.0f);
+float uranusScale = 350.0f; 
+float uranusOrbitRadius = 14000.0f; 
+float uranusOrbitSpeed = 0.01f;
+
+glm::vec3 neptunePos = glm::vec3(16000.0f, 0.0f, 0.0f);
+float neptuneScale = 300.0f; 
+float neptuneOrbitRadius = 16000.0f; 
+float neptuneOrbitSpeed = 0.006f;
+
 
 // Cubes
 glm::vec3 asteroidPositions[] = {
@@ -106,15 +138,33 @@ glm::vec3 asteroidPositions[] = {
     // --- Sun ---
     unsigned int sunTexture;
 
+    // --- Mercury ---
+    unsigned int mercuryTexture;
+
+    // --- Venus ---
+    unsigned int venusTexture;
+
     // --- Earth ---
     unsigned int earthTexture;
 
     // --- Moon ---
     unsigned int moonTexture;
 
-    // --- Mercury ---
-    unsigned int mercuryTexture;
+    // --- Mars ---
+    unsigned int marsTexture;
 
+    // --- Jupiter ---
+    unsigned int jupiterTexture;
+
+    // --- Saturn ---
+    unsigned int saturnTexture;
+
+    // --- Uranus ---
+    unsigned int uranusTexture;
+
+    // --- Neptun ---
+    unsigned int neptuneTexture;
+ 
     unsigned int asteroidVAO, asteroidVBO;
       
 
@@ -133,24 +183,24 @@ void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
-    float cameraSpeed = 800.0f * deltaTime; 
+    float speed = cameraSpeed * deltaTime; 
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cameraPos += cameraSpeed * cameraLookAt;
+        cameraPos += speed * cameraLookAt;
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cameraPos -= cameraSpeed * cameraLookAt;
+        cameraPos -= speed * cameraLookAt;
 
     glm::vec3 rightVector = glm::normalize(glm::cross(cameraLookAt, cameraUp));
     
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        cameraPos += rightVector * cameraSpeed;
+        cameraPos += rightVector * speed;
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        cameraPos -= rightVector * cameraSpeed;
+        cameraPos -= rightVector * speed;
 
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-        cameraPos += cameraUp * cameraSpeed;
+        cameraPos += cameraUp * speed;
     if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-        cameraPos -= cameraUp * cameraSpeed;
+        cameraPos -= cameraUp * speed;
 }
 
 //* Camera Cursor Control
@@ -401,6 +451,54 @@ void drawSun(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glEnable(GL_CULL_FACE);
 }
 
+//* Mercury
+void drawMercury(Shader &shader, glm::mat4 projection, glm::mat4 view) {
+    glDisable(GL_CULL_FACE);
+    shader.use();
+    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection);
+
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, mercuryPos); 
+    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::scale(model, glm::vec3(mercuryScale));
+    
+    shader.setMat4("model", model);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, mercuryTexture); 
+
+    glBindVertexArray(sphereVAO); 
+    glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+    glEnable(GL_CULL_FACE);
+}
+
+//* Venus 
+void drawVenus(Shader &shader, glm::mat4 projection, glm::mat4 view) {
+    glDisable(GL_CULL_FACE);
+    shader.use();
+    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection);
+
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, venusPos); 
+    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::scale(model, glm::vec3(venusScale));
+    
+    shader.setMat4("model", model);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, venusTexture); 
+
+    glBindVertexArray(sphereVAO); 
+    glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+    glEnable(GL_CULL_FACE);
+}
+
 //* Planet Earth
 void drawEarth(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
@@ -449,8 +547,8 @@ void drawMoon(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glEnable(GL_CULL_FACE);
 }
 
-//* Mercury
-void drawMercury(Shader &shader, glm::mat4 projection, glm::mat4 view) {
+//* Mars
+void drawMars(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
     shader.use();
     glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
@@ -459,19 +557,116 @@ void drawMercury(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     shader.setMat4("projection", projection);
 
     glm::mat4 model = glm::mat4(1.0f);
-    model = glm::translate(model, mercuryPos); 
+    model = glm::translate(model, marsPos); 
     model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
-    model = glm::scale(model, glm::vec3(mercuryScale));
+    model = glm::scale(model, glm::vec3(marsScale));
     
     shader.setMat4("model", model);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, mercuryTexture); 
+    glBindTexture(GL_TEXTURE_2D, marsTexture); 
 
     glBindVertexArray(sphereVAO); 
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
     glEnable(GL_CULL_FACE);
 }
+
+//* Jupiter
+void drawJupiter(Shader &shader, glm::mat4 projection, glm::mat4 view) {
+    glDisable(GL_CULL_FACE);
+    shader.use();
+    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection);
+
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, jupiterPos); 
+    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::scale(model, glm::vec3(jupiterScale));
+    
+    shader.setMat4("model", model);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, jupiterTexture); 
+
+    glBindVertexArray(sphereVAO); 
+    glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+    glEnable(GL_CULL_FACE);
+}
+
+//* Saturn
+void drawSaturn(Shader &shader, glm::mat4 projection, glm::mat4 view) {
+    glDisable(GL_CULL_FACE);
+    shader.use();
+    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection);
+
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, saturnPos); 
+    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::scale(model, glm::vec3(saturnScale));
+    
+    shader.setMat4("model", model);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, saturnTexture); 
+
+    glBindVertexArray(sphereVAO); 
+    glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+    glEnable(GL_CULL_FACE);
+}
+
+//* Uranus
+void drawUranus(Shader &shader, glm::mat4 projection, glm::mat4 view) {
+    glDisable(GL_CULL_FACE);
+    shader.use();
+    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection);
+
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, uranusPos); 
+    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::scale(model, glm::vec3(uranusScale));
+    
+    shader.setMat4("model", model);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, uranusTexture); 
+
+    glBindVertexArray(sphereVAO); 
+    glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+    glEnable(GL_CULL_FACE);
+}
+
+//* Neptun
+void drawNeptune(Shader &shader, glm::mat4 projection, glm::mat4 view) {
+    glDisable(GL_CULL_FACE);
+    shader.use();
+    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection);
+
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, neptunePos); 
+    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::scale(model, glm::vec3(neptuneScale));
+    
+    shader.setMat4("model", model);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, neptuneTexture); 
+
+    glBindVertexArray(sphereVAO); 
+    glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+    glEnable(GL_CULL_FACE);
+}
+
 
 //* Spaceship's nose
 void drawSpaceshipNose(Shader &shader, glm::mat4 projection) {
@@ -598,14 +793,34 @@ int main(){
     // Sun's texture
     sunTexture = loadTexture("textures/8k_sun.jpg");
 
+    // Mercury's texture
+    mercuryTexture = loadTexture("textures/8k_mercury.jpg");
+
+    // Venus's texture
+    venusTexture = loadTexture("textures/8k_venus_surface.jpg");
+
     // Earth's texture
     earthTexture = loadTexture("textures/8k_earth_daymap.jpg");
 
     // Moon's texture
     moonTexture = loadTexture("textures/8k_moon.jpg");
+    
+    // Mars's texture
+    marsTexture = loadTexture("textures/8k_mars.jpg");
+    
+    // Jupiter's texture
+    jupiterTexture = loadTexture("textures/8k_jupiter.jpg");
 
-    // Mercury's texture
-    mercuryTexture = loadTexture("textures/8k_mercury.jpg");
+    // Saturns's texture
+    saturnTexture = loadTexture("textures/8k_saturn.jpg");
+
+    // Uranus's texture
+    uranusTexture = loadTexture("textures/2k_uranus.jpg");
+
+    // Neptune's texture
+    neptuneTexture = loadTexture("textures/2k_neptune.jpg");
+
+
 
     while (!glfwWindowShouldClose(window)) {
 
@@ -619,9 +834,16 @@ int main(){
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
+        mercuryPos = calculateOrbit(sunPos, mercuryOrbitRadius, mercuryOrbitSpeed, currentFrame);
+        venusPos = calculateOrbit(sunPos, venusOrbitRadius, venusOrbitSpeed, currentFrame);
         earthPos = calculateOrbit(sunPos, earthOrbitRadius, earthOrbitSpeed, currentFrame);
         moonPos = calculateOrbit(earthPos, moonOrbitRadius, moonOrbitSpeed, currentFrame);
-        mercuryPos = calculateOrbit(sunPos, mercuryOrbitRadius, mercuryOrbitSpeed, currentFrame);
+        marsPos = calculateOrbit(sunPos, marsOrbitRadius, marsOrbitSpeed, currentFrame);
+        jupiterPos = calculateOrbit(sunPos, jupiterOrbitRadius, jupiterOrbitSpeed, currentFrame);
+        saturnPos = calculateOrbit(sunPos, saturnOrbitRadius, saturnOrbitSpeed, currentFrame);
+        uranusPos = calculateOrbit(sunPos, uranusOrbitRadius, uranusOrbitSpeed, currentFrame);
+        neptunePos = calculateOrbit(sunPos, neptuneOrbitRadius, neptuneOrbitSpeed, currentFrame);
+ 
     //* Process Input
         processInput(window);
 
@@ -653,11 +875,17 @@ int main(){
     glm::mat4 farProjection = glm::perspective(glm::radians(45.0f), aspect, 10.0f, farLimit);
 
     drawUniverse(mainShader, farProjection, view);
+    drawMercury(mainShader, farProjection, view);
+    drawVenus(mainShader, farProjection, view);
     drawSun(mainShader, farProjection, view);
     drawEarth(mainShader, farProjection, view);
     drawMoon(mainShader, farProjection, view);
-    drawMercury(mainShader, farProjection, view);
-
+    drawMars(mainShader, farProjection, view);
+    drawJupiter(mainShader, farProjection, view);
+    drawSaturn(mainShader, farProjection, view);
+    drawUranus(mainShader, farProjection, view);
+    drawNeptune(mainShader, farProjection, view);
+    
 // --- THE TRICK: CLEAR DEPTH ---
 // This prevents the background from "cutting" anything we draw next.
 // It keeps the pixels on screen but resets the Z-buffer.
