@@ -159,6 +159,9 @@ glm::vec3 asteroidPositions[] = {
     // --- Saturn ---
     unsigned int saturnTexture;
 
+    // --- Saturn's Ring ---
+    unsigned int saturnRingTexture;
+
     // --- Uranus ---
     unsigned int uranusTexture;
 
@@ -281,6 +284,42 @@ unsigned int loadTexture(char const * path) {
     return textureID;
 }
 
+// --- SECTION 4: UTILITY FUNCTIONS ---
+
+// Function specifically for loading textures with transparency (PNG)
+unsigned int loadAlphaTexture(char const * path) {
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+
+    int width, height, nrComponents;
+    
+    // FORCE 4 channels (RGBA) to keep transparency data
+    stbi_set_flip_vertically_on_load(true); 
+    unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 4);
+    
+    if (data) {
+        GLenum format = GL_RGBA;
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        // Clamp to edge prevents the ring from repeating weirdly at the borders
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+        std::cout << "Successfully loaded ALPHA texture: " << path << std::endl;
+    } else {
+        std::cout << "Texture failed to load at path: " << path << std::endl;
+        stbi_image_free(data);
+    }
+
+    return textureID;
+}
+
 //* Calculate Rotation Orbit
 glm::vec3 calculateOrbit(glm::vec3 center, float radius, float speed, float time) {
     float angle = time * speed;
@@ -395,6 +434,45 @@ void setupAsteroids() {
     glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+}
+
+unsigned int ringVAO, ringVBO;
+
+void setupRing() {
+    // Vertex data: Position (x,y,z) | Normal (x,y,z) | TexCoords (u,v)
+    // Normals point UP (0,1,0) just to satisfy the shader layout
+    float ringVertices[] = {
+        // Positions          // Normals          // Texture Coords
+        -1.0f, 0.0f,  1.0f,   0.0f, 1.0f, 0.0f,   0.0f, 0.0f,
+         1.0f, 0.0f,  1.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,
+         1.0f, 0.0f, -1.0f,   0.0f, 1.0f, 0.0f,   1.0f, 1.0f,
+
+        -1.0f, 0.0f,  1.0f,   0.0f, 1.0f, 0.0f,   0.0f, 0.0f,
+         1.0f, 0.0f, -1.0f,   0.0f, 1.0f, 0.0f,   1.0f, 1.0f,
+        -1.0f, 0.0f, -1.0f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f
+    };
+
+    glGenVertexArrays(1, &ringVAO);
+    glGenBuffers(1, &ringVBO);
+
+    glBindVertexArray(ringVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, ringVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(ringVertices), ringVertices, GL_STATIC_DRAW);
+
+    // Stride is 8 floats (3 pos + 3 normal + 2 tex)
+    // Ensure this matches the layout location in your vertex shader!
+    
+    // 1. Position Attribute (Location 0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    // 2. Normal Attribute (Location 1)
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    // 3. Texture Attribute (Location 2)
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
 }
 
 
@@ -619,6 +697,49 @@ void drawSaturn(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glEnable(GL_CULL_FACE);
 }
 
+//* Ring
+void drawRing(Shader &shader, glm::mat4 projection, glm::mat4 view, 
+              glm::vec3 planetPos, float planetScale, unsigned int textureID) {
+    
+    // --- FIX 1: DEZACTIVĂM CULLING ---
+    // Inelul trebuie să fie vizibil de pe ambele părți (sus și jos)
+    glDisable(GL_CULL_FACE); 
+
+    // Activăm blending pentru transparență
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
+    // Oprim scrierea în depth buffer (rezolvă artefactele vizuale la margini)
+    glDepthMask(GL_FALSE);
+
+    shader.use();
+    
+    // --- RESTUL CODULUI TĂU RĂMÂNE LA FEL ---
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection);
+    
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, planetPos); 
+    
+    float ringScale = planetScale * 2.2f; 
+    model = glm::scale(model, glm::vec3(ringScale, 1.0f, ringScale));
+
+    shader.setMat4("model", model);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+
+    glBindVertexArray(ringVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    // --- RESETĂM SETĂRILE (FOARTE IMPORTANT) ---
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    
+    // --- FIX 1: REACTIVĂM CULLING PENTRU RESTUL PLANETELOR ---
+    glEnable(GL_CULL_FACE); 
+}
+
 //* Uranus
 void drawUranus(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
@@ -643,7 +764,8 @@ void drawUranus(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glEnable(GL_CULL_FACE);
 }
 
-//* Neptun
+
+//* Neptune
 void drawNeptune(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
     shader.use();
@@ -666,6 +788,7 @@ void drawNeptune(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
     glEnable(GL_CULL_FACE);
 }
+
 
 
 //* Spaceship's nose
@@ -814,6 +937,9 @@ int main(){
     // Saturns's texture
     saturnTexture = loadTexture("textures/8k_saturn.jpg");
 
+    // Saturn's Ring texture
+    saturnRingTexture = loadAlphaTexture("textures/8k_saturn_ring.png");
+
     // Uranus's texture
     uranusTexture = loadTexture("textures/2k_uranus.jpg");
 
@@ -883,6 +1009,7 @@ int main(){
     drawMars(mainShader, farProjection, view);
     drawJupiter(mainShader, farProjection, view);
     drawSaturn(mainShader, farProjection, view);
+    drawRing(mainShader, farProjection, view, saturnPos, saturnScale, saturnRingTexture);
     drawUranus(mainShader, farProjection, view);
     drawNeptune(mainShader, farProjection, view);
     
