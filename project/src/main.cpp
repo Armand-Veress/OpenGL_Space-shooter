@@ -41,7 +41,7 @@ glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 float yaw   = -90.0f; 
 float pitch =  0.0f;
 float constantSpeed = 100.0f; 
-float cameraSpeed = 5000.0f;
+float cameraSpeed = 1000.0f;
 
 //* Mouse Cursor Control
 bool firstMouse = true;
@@ -51,6 +51,7 @@ float lastY =  SCR_HEIGHT / 2.0f;
 //* Timing & Physics
 float deltaTime = 0.0f; 
 float lastFrame = 0.0f;
+float globalOrbitSpeed = 0.1f;
 
 //* Object data
 
@@ -66,47 +67,47 @@ float sunScale = 1000.0f;
 glm::vec3 mercuryPos = glm::vec3(3000.0f, 0.0f, 0.0f);
 float mercuryScale = 38.0f; 
 float mercuryOrbitRadius = 3000.0f; 
-float mercuryOrbitSpeed = 0.83f;
+float mercuryOrbitSpeed = 0.83f*globalOrbitSpeed;
 
 glm::vec3 venusPos = glm::vec3(4000.0f, 0.0f, 0.0f);
 float venusScale = 95.0f; 
 float venusOrbitRadius = 4000.0f; 
-float venusOrbitSpeed = 0.32f;
+float venusOrbitSpeed = 0.32f*globalOrbitSpeed;
 
 glm::vec3 earthPos = glm::vec3(5000.0f, 0.0f, 0.0f);
 float earthScale = 100.0f; 
 float earthOrbitRadius = 5000.0f; 
-float earthOrbitSpeed = 0.1f;
+float earthOrbitSpeed = 0.1f*globalOrbitSpeed;
 
 glm::vec3 moonPos = glm::vec3(5250.0f, 0.0f, 0.0f);
 float moonScale = 20.0f; 
 float moonOrbitRadius = 370.0f; 
-float moonOrbitSpeed = 0.8f;
+float moonOrbitSpeed = 0.8f*globalOrbitSpeed;
 
 glm::vec3 marsPos = glm::vec3(6000.0f, 0.0f, 0.0f);
 float marsScale = 53.0f; 
 float marsOrbitRadius = 6000.0f; 
-float marsOrbitSpeed = 0.32f;
+float marsOrbitSpeed = 0.32f*globalOrbitSpeed;
 
 glm::vec3 jupiterPos = glm::vec3(9000.0f, 0.0f, 0.0f);
 float jupiterScale = 700.0f; 
 float jupiterOrbitRadius = 9000.0f; 
-float jupiterOrbitSpeed = 0.08f;
+float jupiterOrbitSpeed = 0.08f*globalOrbitSpeed;
 
 glm::vec3 saturnPos = glm::vec3(12000.0f, 0.0f, 0.0f);
 float saturnScale = 550.0f; 
 float saturnOrbitRadius = 12000.0f; 
-float saturnOrbitSpeed = 0.03f;
+float saturnOrbitSpeed = 0.03f*globalOrbitSpeed;
 
 glm::vec3 uranusPos = glm::vec3(14000.0f, 0.0f, 0.0f);
 float uranusScale = 350.0f; 
 float uranusOrbitRadius = 14000.0f; 
-float uranusOrbitSpeed = 0.01f;
+float uranusOrbitSpeed = 0.01f*globalOrbitSpeed;
 
 glm::vec3 neptunePos = glm::vec3(16000.0f, 0.0f, 0.0f);
 float neptuneScale = 300.0f; 
 float neptuneOrbitRadius = 16000.0f; 
-float neptuneOrbitSpeed = 0.006f;
+float neptuneOrbitSpeed = 0.006f*globalOrbitSpeed;
 
 
 // Cubes
@@ -125,12 +126,11 @@ glm::vec3 asteroidPositions[] = {
 
 //* GPU Resource Handles - Render IDs
     
-    // --- Ship Assets ---
-    unsigned int shipVAO, shipVBO;
-    
-    // --- Spheres (Universe, Sun, Planets) ---
+    // --- VAO & VBO ---
     unsigned int sphereVAO, sphereVBO, sphereEBO;
     unsigned int sphereIndexCount;
+    unsigned int ringVAO, ringVBO;
+    unsigned int shipVAO, shipVBO;
     
     // --- Universe Stars-Background ---
     unsigned int universeTexture;
@@ -140,26 +140,29 @@ glm::vec3 asteroidPositions[] = {
 
     // --- Mercury ---
     unsigned int mercuryTexture;
+    unsigned int mercuryNormalMap;
 
     // --- Venus ---
     unsigned int venusTexture;
+    unsigned int venusNormalMap;
 
     // --- Earth ---
     unsigned int earthTexture;
+    unsigned int earthNormalMap;
 
     // --- Moon ---
     unsigned int moonTexture;
+    unsigned int moonNormalMap;
 
     // --- Mars ---
     unsigned int marsTexture;
+    unsigned int marsNormalMap;
 
     // --- Jupiter ---
     unsigned int jupiterTexture;
 
     // --- Saturn ---
     unsigned int saturnTexture;
-
-    // --- Saturn's Ring ---
     unsigned int saturnRingTexture;
 
     // --- Uranus ---
@@ -168,6 +171,9 @@ glm::vec3 asteroidPositions[] = {
     // --- Neptun ---
     unsigned int neptuneTexture;
  
+    // --- Defauld Flat Normal Map ---
+    unsigned int flatNormalMap;
+
     unsigned int asteroidVAO, asteroidVBO;
       
 
@@ -247,73 +253,46 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
 *********************************/
 
 //* Loading External Texture Assets
-unsigned int loadTexture(char const * path) {
+unsigned int loadTexture(char const * path, bool isAlpha) {
     unsigned int textureID;
     glGenTextures(1, &textureID);
 
     int width, height, nrComponents;
- 
-    stbi_set_flip_vertically_on_load(false); 
-    unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 0);
+    
+    // Flip only for rings/transparent textures if needed
+    stbi_set_flip_vertically_on_load(isAlpha); 
+
+    // Force 4 channels if isAlpha is true, otherwise let stb detect
+    unsigned char *data = stbi_load(path, &width, &height, &nrComponents, isAlpha ? 4 : 0);
     
     if (data) {
         GLenum format;
-        if (nrComponents == 1) format = GL_RED;
-        else if (nrComponents == 3) format = GL_RGB;
-        else if (nrComponents == 4) format = GL_RGBA;
+        if (isAlpha) {
+            format = GL_RGBA;
+        } else {
+            if (nrComponents == 1) format = GL_RED;
+            else if (nrComponents == 3) format = GL_RGB;
+            else if (nrComponents == 4) format = GL_RGBA;
+        }
 
         glBindTexture(GL_TEXTURE_2D, textureID);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
 
-        // How the texture behaves at the edges
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-        // How the texture looks when far away (Filtering)
+        // RING SETTINGS: Clamp to edge prevents seams
+        // PLANET SETTINGS: Repeat for tiling
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, isAlpha ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, isAlpha ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+        
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
         stbi_image_free(data);
-        std::cout << "Successfully loaded texture at: " << path << std::endl;
+        std::cout << "SUCCESS: Loaded " << (isAlpha ? "ALPHA " : "") << "texture: " << path << std::endl;
     } else {
-        std::cout << "Texture failed to load at path: " << path << std::endl;
-        stbi_image_free(data);
-    }
-
-    return textureID;
-}
-
-// --- SECTION 4: UTILITY FUNCTIONS ---
-
-// Function specifically for loading textures with transparency (PNG)
-unsigned int loadAlphaTexture(char const * path) {
-    unsigned int textureID;
-    glGenTextures(1, &textureID);
-
-    int width, height, nrComponents;
-    
-    // FORCE 4 channels (RGBA) to keep transparency data
-    stbi_set_flip_vertically_on_load(true); 
-    unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 4);
-    
-    if (data) {
-        GLenum format = GL_RGBA;
-
-        glBindTexture(GL_TEXTURE_2D, textureID);
-        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-        // Clamp to edge prevents the ring from repeating weirdly at the borders
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        stbi_image_free(data);
-        std::cout << "Successfully loaded ALPHA texture: " << path << std::endl;
-    } else {
-        std::cout << "Texture failed to load at path: " << path << std::endl;
+        std::cout << "ERROR: Failed to load texture: " << path << std::endl;
         stbi_image_free(data);
     }
 
@@ -355,7 +334,18 @@ void setupSphere() {
             float uTex = xSegment;
             float vTex = ySegment;
 
+            // Normal
+            glm::vec3 normal(xPos, yPos, zPos);
+
+            // Tangent
+            float tx = -std::sin(xSegment * 2.0f * PI);
+            float ty = 0.0f;
+            float tz = std::cos(xSegment * 2.0f * PI);
+            glm::vec3 tangent(tx, ty, tz);
+
             vertices.push_back(xPos); vertices.push_back(yPos); vertices.push_back(zPos);
+            vertices.push_back(normal.x); vertices.push_back(normal.y); vertices.push_back(normal.z);
+            vertices.push_back(tangent.x); vertices.push_back(tangent.y); vertices.push_back(tangent.z);
             vertices.push_back(uTex); vertices.push_back(vTex);
         }
     }
@@ -384,10 +374,19 @@ void setupSphere() {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereEBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    int stride = 11 * sizeof(float);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
+
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, stride, (void*)(9 * sizeof(float)));
+    glEnableVertexAttribArray(3);  
 }
 
 //* Spaceship's nose
@@ -436,20 +435,17 @@ void setupAsteroids() {
     glEnableVertexAttribArray(0);
 }
 
-unsigned int ringVAO, ringVBO;
-
+//* Saturn's Ring
 void setupRing() {
-    // Vertex data: Position (x,y,z) | Normal (x,y,z) | TexCoords (u,v)
-    // Normals point UP (0,1,0) just to satisfy the shader layout
     float ringVertices[] = {
-        // Positions          // Normals          // Texture Coords
-        -1.0f, 0.0f,  1.0f,   0.0f, 1.0f, 0.0f,   0.0f, 0.0f,
-         1.0f, 0.0f,  1.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,
-         1.0f, 0.0f, -1.0f,   0.0f, 1.0f, 0.0f,   1.0f, 1.0f,
+        // Pos                // Norm             // Tangent          // UV
+        -1.0f, 0.0f,  1.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, 0.0f,   0.0f, 0.0f,
+         1.0f, 0.0f,  1.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 0.0f,
+         1.0f, 0.0f, -1.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f,
 
-        -1.0f, 0.0f,  1.0f,   0.0f, 1.0f, 0.0f,   0.0f, 0.0f,
-         1.0f, 0.0f, -1.0f,   0.0f, 1.0f, 0.0f,   1.0f, 1.0f,
-        -1.0f, 0.0f, -1.0f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f
+        -1.0f, 0.0f,  1.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, 0.0f,   0.0f, 0.0f,
+         1.0f, 0.0f, -1.0f,   0.0f, 1.0f, 0.0f,   1.0f, 1.0f, 0.0f,   1.0f, 1.0f,
+        -1.0f, 0.0f, -1.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, 0.0f,   0.0f, 1.0f
     };
 
     glGenVertexArrays(1, &ringVAO);
@@ -459,22 +455,24 @@ void setupRing() {
     glBindBuffer(GL_ARRAY_BUFFER, ringVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(ringVertices), ringVertices, GL_STATIC_DRAW);
 
-    // Stride is 8 floats (3 pos + 3 normal + 2 tex)
-    // Ensure this matches the layout location in your vertex shader!
-    
-    // 1. Position Attribute (Location 0)
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    int stride = 11 * sizeof(float);
+
+    // POSITION
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
     glEnableVertexAttribArray(0);
 
-    // 2. Normal Attribute (Location 1)
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    // NORMAL
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    // 3. Texture Attribute (Location 2)
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    // TANGENT
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
-}
 
+    // UV
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, stride, (void*)(9 * sizeof(float)));
+    glEnableVertexAttribArray(3);
+}
 
 /*******************************
 ** SECTION 6: RENDERING LOGIC **
@@ -486,7 +484,7 @@ void drawUniverse(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDepthMask(GL_FALSE);
     glDisable(GL_CULL_FACE);
     shader.use();
-    shader.setBool("hasTexture", true);
+    shader.setBool("isSun", true);
 
     glm::mat4 viewStatic = glm::mat4(glm::mat3(view)); 
     shader.setMat4("view", viewStatic);
@@ -498,6 +496,8 @@ void drawUniverse(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, universeTexture);
+    shader.setInt("diffuseMap", 0);
+
     glBindVertexArray(sphereVAO);
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
 
@@ -507,10 +507,15 @@ void drawUniverse(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 
 //* Sun
 void drawSun(Shader &shader, glm::mat4 projection, glm::mat4 view) {
-    glDisable(GL_CULL_FACE);
+    glDisable(GL_CULL_FACE); 
     shader.use();
-    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+    shader.setBool("isSun", true); 
 
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, sunTexture); 
+    shader.setInt("diffuseMap", 0); // Link the texture to the shader sampler
+
+    // View & Projection Matrices
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
 
@@ -518,12 +523,9 @@ void drawSun(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     model = glm::translate(model, sunPos); 
     model = glm::rotate(model, (float)glfwGetTime() * 0.01f, glm::vec3(0.0f, 1.0f, 0.0f));
     model = glm::scale(model, glm::vec3(sunScale));
-    
     shader.setMat4("model", model);
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, sunTexture); 
-
+    //  Draw
     glBindVertexArray(sphereVAO); 
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
     glEnable(GL_CULL_FACE);
@@ -533,20 +535,24 @@ void drawSun(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 void drawMercury(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
     shader.use();
-    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+    shader.setBool("isSun", false);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, mercuryTexture);
+    shader.setInt("diffuseMap", 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, mercuryNormalMap);
+    shader.setInt("normalMap", 1);
 
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, mercuryPos); 
-    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * 0.1f, glm::vec3(0.0f, 1.0f, 0.0f));
     model = glm::scale(model, glm::vec3(mercuryScale));
-    
     shader.setMat4("model", model);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, mercuryTexture); 
 
     glBindVertexArray(sphereVAO); 
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
@@ -557,20 +563,24 @@ void drawMercury(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 void drawVenus(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
     shader.use();
-    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+    shader.setBool("isSun", false);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, venusTexture);
+    shader.setInt("diffuseMap", 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, venusNormalMap);
+    shader.setInt("normalMap", 1);
 
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, venusPos); 
-    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * 0.1f, glm::vec3(0.0f, 1.0f, 0.0f));
     model = glm::scale(model, glm::vec3(venusScale));
-    
     shader.setMat4("model", model);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, venusTexture); 
 
     glBindVertexArray(sphereVAO); 
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
@@ -581,20 +591,24 @@ void drawVenus(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 void drawEarth(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
     shader.use();
-    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+    shader.setBool("isSun", false);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, earthTexture);
+    shader.setInt("diffuseMap", 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, earthNormalMap);
+    shader.setInt("normalMap", 1);
 
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, earthPos); 
-    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * 0.1f, glm::vec3(0.0f, 1.0f, 0.0f));
     model = glm::scale(model, glm::vec3(earthScale));
-    
     shader.setMat4("model", model);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, earthTexture); 
 
     glBindVertexArray(sphereVAO); 
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
@@ -605,20 +619,24 @@ void drawEarth(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 void drawMoon(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
     shader.use();
-    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+    shader.setBool("isSun", false);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, moonTexture);
+    shader.setInt("diffuseMap", 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, moonNormalMap);
+    shader.setInt("normalMap", 1);
 
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, moonPos); 
-    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * 0.1f, glm::vec3(0.0f, 1.0f, 0.0f));
     model = glm::scale(model, glm::vec3(moonScale));
-    
     shader.setMat4("model", model);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, moonTexture); 
 
     glBindVertexArray(sphereVAO); 
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
@@ -629,20 +647,24 @@ void drawMoon(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 void drawMars(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
     shader.use();
-    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+    shader.setBool("isSun", false);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, marsTexture);
+    shader.setInt("diffuseMap", 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, marsNormalMap);
+    shader.setInt("normalMap", 1);
 
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, marsPos); 
-    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * 0.1f, glm::vec3(0.0f, 1.0f, 0.0f));
     model = glm::scale(model, glm::vec3(marsScale));
-    
     shader.setMat4("model", model);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, marsTexture); 
 
     glBindVertexArray(sphereVAO); 
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
@@ -653,20 +675,24 @@ void drawMars(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 void drawJupiter(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
     shader.use();
-    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+    shader.setBool("isSun", false);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, jupiterTexture);
+    shader.setInt("diffuseMap", 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, flatNormalMap);
+    shader.setInt("normalMap", 1);
 
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, jupiterPos); 
-    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * 0.1f, glm::vec3(0.0f, 1.0f, 0.0f));
     model = glm::scale(model, glm::vec3(jupiterScale));
-    
     shader.setMat4("model", model);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, jupiterTexture); 
 
     glBindVertexArray(sphereVAO); 
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
@@ -677,66 +703,73 @@ void drawJupiter(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 void drawSaturn(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
     shader.use();
-    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+    shader.setBool("isSun", false);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, saturnTexture);
+    shader.setInt("diffuseMap", 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, flatNormalMap);
+    shader.setInt("normalMap", 1);
 
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, saturnPos); 
-    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * 0.1f, glm::vec3(0.0f, 1.0f, 0.0f));
     model = glm::scale(model, glm::vec3(saturnScale));
-    
     shader.setMat4("model", model);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, saturnTexture); 
 
     glBindVertexArray(sphereVAO); 
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
     glEnable(GL_CULL_FACE);
 }
 
-//* Ring
+
+//* Saturn's Ring
 void drawRing(Shader &shader, glm::mat4 projection, glm::mat4 view, 
               glm::vec3 planetPos, float planetScale, unsigned int textureID) {
     
-    // --- FIX 1: DEZACTIVĂM CULLING ---
-    // Inelul trebuie să fie vizibil de pe ambele părți (sus și jos)
-    glDisable(GL_CULL_FACE); 
-
-    // Activăm blending pentru transparență
+    // STATE: BLENDING
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
-    // Oprim scrierea în depth buffer (rezolvă artefactele vizuale la margini)
+    // STATE: DEPTH & CULLING
     glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);
 
     shader.use();
-    
-    // --- RESTUL CODULUI TĂU RĂMÂNE LA FEL ---
+    shader.setBool("isSun", true);
+
+    // UNIFORMS: MATRICES
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
     
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, planetPos); 
-    
     float ringScale = planetScale * 2.2f; 
     model = glm::scale(model, glm::vec3(ringScale, 1.0f, ringScale));
-
     shader.setMat4("model", model);
 
+    // TEXTURE: DIFFUSE
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, textureID);
+    shader.setInt("diffuseMap", 0);
 
+    // TEXTURE: NORMAL (FLAT)
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, flatNormalMap);
+    shader.setInt("normalMap", 1);
+
+    // RENDER
     glBindVertexArray(ringVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    // --- RESETĂM SETĂRILE (FOARTE IMPORTANT) ---
+    // RESTORE STATE
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
-    
-    // --- FIX 1: REACTIVĂM CULLING PENTRU RESTUL PLANETELOR ---
     glEnable(GL_CULL_FACE); 
 }
 
@@ -744,51 +777,57 @@ void drawRing(Shader &shader, glm::mat4 projection, glm::mat4 view,
 void drawUranus(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
     shader.use();
-    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+    shader.setBool("isSun", false);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, uranusTexture);
+    shader.setInt("diffuseMap", 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, flatNormalMap);
+    shader.setInt("normalMap", 1);
 
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, uranusPos); 
-    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * 0.1f, glm::vec3(0.0f, 1.0f, 0.0f));
     model = glm::scale(model, glm::vec3(uranusScale));
-    
     shader.setMat4("model", model);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, uranusTexture); 
 
     glBindVertexArray(sphereVAO); 
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
     glEnable(GL_CULL_FACE);
 }
 
-
-//* Neptune
+//* Neptun
 void drawNeptune(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
     shader.use();
-    glUniform1i(glGetUniformLocation(shader.ID, "hasTexture"), 1);
+    shader.setBool("isSun", false);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, neptuneTexture);
+    shader.setInt("diffuseMap", 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, flatNormalMap);
+    shader.setInt("normalMap", 1);
 
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, neptunePos); 
-    model = glm::rotate(model, (float)glfwGetTime() * 0.2f, glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * 0.1f, glm::vec3(0.0f, 1.0f, 0.0f));
     model = glm::scale(model, glm::vec3(neptuneScale));
-    
     shader.setMat4("model", model);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, neptuneTexture); 
 
     glBindVertexArray(sphereVAO); 
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
     glEnable(GL_CULL_FACE);
 }
-
 
 
 //* Spaceship's nose
@@ -827,7 +866,6 @@ void drawAsteroids(Shader &shader, glm::mat4 projection, glm::mat4 view) {
         glDrawArrays(GL_TRIANGLES, 0, 36);
     }
 }
-
 
 
 int main(){
@@ -889,8 +927,9 @@ int main(){
 ** SECTION 9: GLOBAL OPENGL CONFIGURATIONS  **
 *********************************************/
 
-    // Sphere model
+    // Geometric Shapes Models
     setupSphere();
+    setupRing();
 
     // Spaceship's nose model
     setupNose();
@@ -911,41 +950,50 @@ int main(){
 
 //* Load Textures
     // Universe Stars-Background texture
-    universeTexture = loadTexture("textures/8k_stars_milky_way.jpg");
+    universeTexture = loadTexture("textures/8k_stars_milky_way.jpg", false);
 
     // Sun's texture
-    sunTexture = loadTexture("textures/8k_sun.jpg");
+    sunTexture = loadTexture("textures/8k_sun.jpg", false);
 
     // Mercury's texture
-    mercuryTexture = loadTexture("textures/8k_mercury.jpg");
+    mercuryTexture = loadTexture("textures/8k_mercury.jpg", false);
+    mercuryNormalMap = loadTexture("textures/mercury_normal.png", false);
 
     // Venus's texture
-    venusTexture = loadTexture("textures/8k_venus_surface.jpg");
+    venusTexture = loadTexture("textures/8k_venus_surface.jpg", false);
+    venusNormalMap = loadTexture("textures/venus_normal.png", false);
 
     // Earth's texture
-    earthTexture = loadTexture("textures/8k_earth_daymap.jpg");
+    earthTexture = loadTexture("textures/8k_earth_daymap.jpg", false);
+    earthNormalMap = loadTexture("textures/earth_normal.png", false);
 
     // Moon's texture
-    moonTexture = loadTexture("textures/8k_moon.jpg");
+    moonTexture = loadTexture("textures/8k_moon.jpg", false);
+    moonNormalMap = loadTexture("textures/moon_normal.png", false);
     
     // Mars's texture
-    marsTexture = loadTexture("textures/8k_mars.jpg");
-    
+    marsTexture = loadTexture("textures/8k_mars.jpg", false);
+    marsNormalMap = loadTexture("textures/mars_normal.png", false);
+
     // Jupiter's texture
-    jupiterTexture = loadTexture("textures/8k_jupiter.jpg");
+    jupiterTexture = loadTexture("textures/8k_jupiter.jpg", false);
 
     // Saturns's texture
-    saturnTexture = loadTexture("textures/8k_saturn.jpg");
-
-    // Saturn's Ring texture
-    saturnRingTexture = loadAlphaTexture("textures/8k_saturn_ring.png");
+    saturnTexture = loadTexture("textures/8k_saturn.jpg", false);
+    saturnRingTexture = loadTexture("textures/8k_saturn_ring.png", true);
 
     // Uranus's texture
-    uranusTexture = loadTexture("textures/2k_uranus.jpg");
+    uranusTexture = loadTexture("textures/2k_uranus.jpg", false);
 
     // Neptune's texture
-    neptuneTexture = loadTexture("textures/2k_neptune.jpg");
-
+    neptuneTexture = loadTexture("textures/2k_neptune.jpg", false);
+    
+    // Generate Default Flat Normal Map
+    glGenTextures(1, &flatNormalMap);
+    glBindTexture(GL_TEXTURE_2D, flatNormalMap);
+    unsigned char pixel[] = { 128, 128, 255, 255 }; 
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+    glGenerateMipmap(GL_TEXTURE_2D);
 
 
     while (!glfwWindowShouldClose(window)) {
@@ -999,6 +1047,10 @@ int main(){
 ********************************/
     float farLimit = 100000.0f; 
     glm::mat4 farProjection = glm::perspective(glm::radians(45.0f), aspect, 10.0f, farLimit);
+
+    mainShader.use();
+    mainShader.setVec3("sunPos", sunPos);
+    mainShader.setVec3("viewPos", cameraPos);
 
     drawUniverse(mainShader, farProjection, view);
     drawMercury(mainShader, farProjection, view);
