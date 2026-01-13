@@ -17,11 +17,10 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-
+#include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <vector>
-#include <cstdlib> // pt rand()
-#include <ctime>   // pt time()
 
 #include "Shader.h"
 
@@ -35,15 +34,15 @@ const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
 //* Camera Definition
-glm::vec3 cameraPos    = glm::vec3(4500.0f, 0.0f, 0.0f);
+glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f, 3000.0f);
 glm::vec3 cameraLookAt = glm::vec3(0.0f, 0.0f, -1.0f);
-glm::vec3 cameraUp     = glm::vec3(0.0f, 1.0f, 0.0f);
+glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 
 //* Camera Movement
 float yaw   = -90.0f; 
 float pitch =  0.0f;
 float constantSpeed = 100.0f; 
-float cameraSpeed = 5000.0f;
+float cameraSpeed = 500.0f;
 
 //* Mouse Cursor Control
 bool firstMouse = true;
@@ -55,7 +54,7 @@ float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 float globalOrbitSpeed = 0.1f;
 
-// GAMEPLAY GLOBALS  
+//* GAMEPLAY GLOBALS  
 bool isGameOver = false;
 float lastSpawnTime = 0.0f;
 
@@ -66,7 +65,7 @@ struct Asteroid {
     float scale;
     bool isActive;
 };
-std::vector<Asteroid> asteroids; // Lista dinamica
+std::vector<Asteroid> asteroids; 
 
 //* Object data
 
@@ -124,14 +123,39 @@ float neptuneScale = 300.0f;
 float neptuneOrbitRadius = 16000.0f; 
 float neptuneOrbitSpeed = 0.006f*globalOrbitSpeed;
 
+// Ship 
+float shipScale = 2.0f;
+float shipLength = 5.0f;
+float shipWidth = 0.5f;
+float shipHeight = 0.1;
+
+
+struct LaserBeam {
+    glm::vec3 position;
+    glm::vec3 direction;
+    float speed;
+    float lifeTime;
+};
+std::vector<LaserBeam> activeLasers;
+float laserSpeed = 50.0f;
+float laserThickness = 0.02f; 
+float laserLength = 20.0f;
+float lastShotTime = 0.0f;
+
+float shipRoll = 0.0f;  // Z-axis
+float shipPitch = 0.0f; // X-axis
+float mouseXOffset = 0.0f;
+float mouseYOffset = 0.0f;
+
 //* GPU Resource Handles - Render IDs
     
     // --- VAO & VBO ---
     unsigned int sphereVAO, sphereVBO, sphereEBO;
     unsigned int sphereIndexCount;
     unsigned int ringVAO, ringVBO;
-    unsigned int shipVAO, shipVBO;
-    unsigned int crosshairVAO, crosshairVBO; // (NOU) Tinta
+    unsigned int shipVAO, shipVBO, shipEBO;
+    unsigned int crosshairVAO, crosshairVBO; 
+    unsigned int asteroidVAO, asteroidVBO;
     
     // --- Universe Stars-Background ---
     unsigned int universeTexture;
@@ -175,10 +199,11 @@ float neptuneOrbitSpeed = 0.006f*globalOrbitSpeed;
     // --- Defauld Flat Normal Map ---
     unsigned int flatNormalMap;
 
+    // --- Spaceship ---
+    unsigned int shipTexture;
+
     // --- ASTEROID TEXTURE  ---
     unsigned int asteroidTexture;
-
-    unsigned int asteroidVAO, asteroidVBO;
       
 
 /************************************************
@@ -221,6 +246,7 @@ void shoot() {
     }
 }
 
+
 // SPAWN LOGIC
 void spawnAsteroid() {
     Asteroid a;
@@ -250,76 +276,102 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     }
 }
 
-//* Camera Keyboard Control 
+//* Camera Keyboard Control -- Movement & Steering
 void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
-    
-    // RESTART
-    if (isGameOver) {
-        if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
-            resetGame();
-        }
-        return; // Oprim miscarea daca e game over
+
+    // Constant Forward Speed with Boost
+    float currentSpeed = cameraSpeed;
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || 
+        glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
+        currentSpeed *= 4.0f;
+    }
+    cameraPos += cameraLookAt * currentSpeed * deltaTime;
+
+    // Rotation Speed for Keys
+    float rotationStep = 50.0f * deltaTime;
+
+    // WSAD mapping to Pitch and Yaw (Virtual Mouse)
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+        pitch += rotationStep;     // Rotate World Up
+        mouseYOffset = 2.0f;       // Visual Lag Up
+    }
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+        pitch -= rotationStep;     // Rotate World Down
+        mouseYOffset = -2.0f;      // Visual Lag Down
+    }
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+        yaw -= rotationStep;       // Rotate World Left
+        mouseXOffset = -2.0f;      // Visual Roll Left
+    }
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+        yaw += rotationStep;       // Rotate World Right
+        mouseXOffset = 2.0f;       // Visual Roll Right
     }
 
-    float speed = cameraSpeed * deltaTime; 
+    // Constraints & Vector Update
+    if (pitch > 89.0f) pitch = 89.0f;
+    if (pitch < -89.0f) pitch = -89.0f;
 
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cameraPos += speed * cameraLookAt;
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cameraPos -= speed * cameraLookAt;
+    glm::vec3 front;
+    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    front.y = sin(glm::radians(pitch));
+    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    cameraLookAt = glm::normalize(front);
 
-    glm::vec3 rightVector = glm::normalize(glm::cross(cameraLookAt, cameraUp));
-     
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        cameraPos += rightVector * speed;
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        cameraPos -= rightVector * speed;
-
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-        cameraPos += cameraUp * speed;
-    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-        cameraPos -= cameraUp * speed;
+    // Laser Control
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS || 
+        glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+        float currentTime = (float)glfwGetTime();
+        if (currentTime - lastShotTime > 0.15f) {
+            LaserBeam newLaser;
+            newLaser.position = cameraPos + (cameraLookAt * shipLength) + (cameraUp * -0.25f);
+            newLaser.direction = cameraLookAt;
+            newLaser.speed = laserSpeed; 
+            newLaser.lifeTime = 5.0f;
+            activeLasers.push_back(newLaser);
+            lastShotTime = currentTime;
+        }
+    }
 }
 
 //* Camera Cursor Control
+// LABEL: Mouse Direction Control
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
-    if (isGameOver) return; // Blocare mouse la game over
-
     float xpos = static_cast<float>(xposIn);
     float ypos = static_cast<float>(yposIn);
 
     if (firstMouse) {
-        lastX = xpos;
-        lastY = ypos;
+        lastX = xpos; lastY = ypos;
         firstMouse = false;
     }
 
     float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos;
-    lastX = xpos;
-    lastY = ypos;
+    float yoffset = ypos - lastY; 
+    lastX = xpos; lastY = ypos;
 
-    float sensitivity = 0.1f; 
+    float sensitivity = 0.05f; 
     xoffset *= sensitivity;
     yoffset *= sensitivity;
 
-    yaw   += xoffset;
-    pitch += yoffset;
+    mouseXOffset = xoffset; 
+    mouseYOffset = -yoffset;
 
-    // Constrain pitch so the screen doesn't flip
+    yaw   += xoffset;
+    pitch -= yoffset;
+
+    // Clamp Pitch
     if (pitch > 89.0f)  pitch = 89.0f;
     if (pitch < -89.0f) pitch = -89.0f;
 
-    // Update cameraLookAt vector
+    // Calculate Look Vector
     glm::vec3 front;
     front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
     front.y = sin(glm::radians(pitch));
     front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
     cameraLookAt = glm::normalize(front);
 }
-
 
 /*********************************
 ** SECTION 4: UTILITY FUNCTIONS **
@@ -337,7 +389,7 @@ unsigned int loadTexture(char const * path, bool isAlpha) {
 
     // Force 4 channels if isAlpha is true, otherwise let stb detect
     unsigned char *data = stbi_load(path, &width, &height, &nrComponents, isAlpha ? 4 : 0);
-     
+    
     if (data) {
         GLenum format;
         if (isAlpha) {
@@ -462,65 +514,44 @@ void setupSphere() {
     glEnableVertexAttribArray(3);  
 }
 
-//* Spaceship's nose
-void setupNose() {
-    float noseVertices[] = {
-         0.0f,  0.05f, 0.0f, 
-        -0.1f, -0.10f, 0.0f, 
-         0.1f, -0.10f, 0.0f  
+//* Ship
+void setupShip() {
+    float halfW = shipWidth / 2.0f;
+    float halfH = shipHeight / 2.0f;
+
+    float shipVertices[] = {
+        // X          Y               Z               U     V
+        // --- PANOU DREAPTA-SUS ---
+         0.0f,       0.0f,           0.0f,           0.0f, 0.0f, 
+         halfW,     -halfH,          0.0f,           1.0f, 0.0f, 
+         0.0f,      -halfH,         -shipLength,     0.5f, 5.0f, 
+
+        // --- PANOU STÂNGA-SUS ---
+         0.0f,       0.0f,           0.0f,           1.0f, 0.0f, 
+        -halfW,     -halfH,          0.0f,           0.0f, 0.0f, 
+         0.0f,      -halfH,         -shipLength,     0.5f, 5.0f, 
+
+        // --- PANOU DREAPTA-JOS ---
+         0.0f,      -shipHeight,     0.0f,           0.0f, 0.0f, 
+         halfW,     -halfH,          0.0f,           1.0f, 0.0f, 
+         0.0f,      -halfH,         -shipLength,     0.5f, 5.0f, 
+
+        // --- PANOU STÂNGA-JOS ---
+         0.0f,      -shipHeight,     0.0f,           1.0f, 0.0f, 
+        -halfW,     -halfH,          0.0f,           0.0f, 0.0f, 
+         0.0f,      -halfH,         -shipLength,     0.5f, 5.0f
     };
+
     glGenVertexArrays(1, &shipVAO);
     glGenBuffers(1, &shipVBO);
     glBindVertexArray(shipVAO);
     glBindBuffer(GL_ARRAY_BUFFER, shipVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(noseVertices), noseVertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(shipVertices), shipVertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-}
-
-// Setup CROSSHAIR
-void setupCrosshair() {
-    float chVertices[] = {
-        -0.03f, 0.0f, 0.0f,   0.03f, 0.0f, 0.0f, // Orizontal
-         0.0f, -0.04f, 0.0f,  0.0f, 0.04f, 0.0f  // Vertical
-    };
-    glGenVertexArrays(1, &crosshairVAO);
-    glGenBuffers(1, &crosshairVBO);
-    glBindVertexArray(crosshairVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, crosshairVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(chVertices), chVertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-}
-
-//* Cubes
-void setupAsteroids() {
-    float cubeVertices[] = {
-        -0.5f, -0.5f, -0.5f,  0.5f, -0.5f, -0.5f,  0.5f,  0.5f, -0.5f,
-    0.5f,  0.5f, -0.5f, -0.5f,  0.5f, -0.5f, -0.5f, -0.5f, -0.5f,
-
-    -0.5f, -0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,  0.5f,  0.5f,
-     0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f, -0.5f, -0.5f,  0.5f,
-
-    -0.5f,  0.5f,  0.5f, -0.5f,  0.5f, -0.5f, -0.5f, -0.5f, -0.5f,
-    -0.5f, -0.5f, -0.5f, -0.5f, -0.5f,  0.5f, -0.5f,  0.5f,  0.5f,
-
-     0.5f,  0.5f,  0.5f,  0.5f,  0.5f, -0.5f,  0.5f, -0.5f, -0.5f,
-     0.5f, -0.5f, -0.5f,  0.5f, -0.5f,  0.5f,  0.5f,  0.5f,  0.5f,
-
-    -0.5f, -0.5f, -0.5f,  0.5f, -0.5f, -0.5f,  0.5f, -0.5f,  0.5f,
-     0.5f, -0.5f,  0.5f, -0.5f, -0.5f,  0.5f, -0.5f, -0.5f, -0.5f,
-
-    -0.5f,  0.5f, -0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,  0.5f,
-     0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f, -0.5f,  0.5f, -0.5f
-    };
-    glGenVertexArrays(1, &asteroidVAO);
-    glGenBuffers(1, &asteroidVBO);
-    glBindVertexArray(asteroidVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, asteroidVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(3);
 }
 
 //* Saturn's Ring
@@ -560,6 +591,21 @@ void setupRing() {
     // UV
     glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, stride, (void*)(9 * sizeof(float)));
     glEnableVertexAttribArray(3);
+}
+
+// Setup CROSSHAIR
+void setupCrosshair() {
+    float chVertices[] = {
+        -0.03f, 0.0f, 0.0f,   0.03f, 0.0f, 0.0f, // Orizontal
+         0.0f, -0.04f, 0.0f,  0.0f, 0.04f, 0.0f  // Vertical
+    };
+    glGenVertexArrays(1, &crosshairVAO);
+    glGenBuffers(1, &crosshairVBO);
+    glBindVertexArray(crosshairVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, crosshairVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(chVertices), chVertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
 }
 
 /*******************************
@@ -817,7 +863,6 @@ void drawSaturn(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 
 
 //* Saturn's Ring
-
 void drawRing(Shader &shader, glm::mat4 projection, glm::mat4 view, 
               glm::vec3 planetPos, float planetScale, unsigned int textureID) {
     
@@ -831,7 +876,6 @@ void drawRing(Shader &shader, glm::mat4 projection, glm::mat4 view,
 
     shader.use();
     shader.setBool("isSun", true);
-    shader.setBool("isRing", true); 
 
     // UNIFORMS: MATRICES
     shader.setMat4("view", view);
@@ -863,7 +907,6 @@ void drawRing(Shader &shader, glm::mat4 projection, glm::mat4 view,
     glEnable(GL_CULL_FACE); 
 }
 
-
 //* Uranus
 void drawUranus(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
@@ -891,7 +934,6 @@ void drawUranus(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
     glEnable(GL_CULL_FACE);
 }
-
 
 //* Neptun
 void drawNeptune(Shader &shader, glm::mat4 projection, glm::mat4 view) {
@@ -922,23 +964,54 @@ void drawNeptune(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 }
 
 
-//* Spaceship's nose
-void drawSpaceshipNose(Shader &shader, glm::mat4 projection) {
+//* Ship
+void drawShip(Shader &shader, glm::mat4 projection) {
+    glDisable(GL_CULL_FACE);
     shader.use();
+    shader.setBool("isSun", true);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, shipTexture);
+    shader.setInt("diffuseMap", 0);
+
+    shader.setMat4("view", glm::mat4(1.0f));
     shader.setMat4("projection", projection);
-    
-    glm::mat4 view = glm::mat4(1.0f); 
-    shader.setMat4("view", view);
 
     glm::mat4 model = glm::mat4(1.0f);
- 
-    model = glm::translate(model, glm::vec3(0.0f, -0.6f, -1.5f)); 
-    model = glm::rotate(model, glm::radians(-15.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-    
+    model = glm::translate(model, glm::vec3(0.0f, -0.2f, 0.5f)); 
+    model = glm::rotate(model, glm::radians(shipRoll), glm::vec3(0.0f, 0.0f, 1.0f));
+    model = glm::rotate(model, glm::radians(shipPitch), glm::vec3(1.0f, 0.0f, 0.0f)); // ADD THIS
+    model = glm::rotate(model, glm::radians(-8.0f), glm::vec3(1.0f, 0.0f, 0.0f)); // PERSPECTIVE FIX
+    model = glm::scale(model, glm::vec3(shipScale));
+
     shader.setMat4("model", model);
 
     glBindVertexArray(shipVAO);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDrawArrays(GL_TRIANGLES, 0, 12);
+    glEnable(GL_CULL_FACE);
+}
+
+// Ship's Laser
+void drawLaser(Shader &shader, glm::mat4 projection, glm::mat4 view) {
+    shader.use();
+    shader.setBool("isSun", true);
+    shader.setVec3("customColor", glm::vec3(0.0f, 1.0f, 0.5f)); 
+
+    for (const auto& laser : activeLasers) {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, laser.position);
+        
+        // Aliniem cilindrul cu direcția de zbor
+        model = model * glm::inverse(glm::lookAt(glm::vec3(0.0f), laser.direction, glm::vec3(0.0f, 1.0f, 0.0f)));
+        model = glm::scale(model, glm::vec3(laserThickness, laserThickness, laserLength));
+
+        shader.setMat4("view", view); // ATENȚIE: Folosim View-ul real, nu identitate!
+        shader.setMat4("projection", projection);
+        shader.setMat4("model", model);
+
+        glBindVertexArray(sphereVAO);
+        glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+    }
 }
 
 // Dynamic Asteroids
@@ -994,7 +1067,6 @@ void drawCrosshair(Shader &shader) {
     glEnable(GL_DEPTH_TEST);
 }
 
-
 int main(){
 
 
@@ -1008,7 +1080,11 @@ int main(){
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "CGRMR - OpenGL project", NULL, NULL);
+    //GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "CGRMR - OpenGL project", NULL, NULL);
+    GLFWmonitor* primaryMonitor = glfwGetPrimaryMonitor(); 
+    const GLFWvidmode* mode = glfwGetVideoMode(primaryMonitor); 
+    GLFWwindow* window = glfwCreateWindow(mode->width, mode->height, "CGRMR - Death Star Defender", primaryMonitor, NULL); 
+
     if (window == NULL) {
         std::cout << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -1039,9 +1115,6 @@ int main(){
     // Set Mouse Callback
     glfwSetCursorPosCallback(window, mouse_callback);
 
-    // Callback Click Mouse
-    glfwSetMouseButtonCallback(window, mouse_button_callback);
-
 
 /*********************************************
 ** SECTION 8: GLOBAL OPENGL CONFIGURATIONS  **
@@ -1062,12 +1135,8 @@ int main(){
     setupRing();
 
     // Spaceship's nose model
-    setupNose();
+    setupShip();
 
-    // Cubes model
-    setupAsteroids(); // (Folosit doar pt incarcarea VBO vechi, nu pt logica noua)
-    
-    // (NOU) Setup Crosshair
     setupCrosshair();
 
 
@@ -1120,10 +1189,13 @@ int main(){
 
     // Neptune's texture
     neptuneTexture = loadTexture("textures/2k_neptune.jpg", false);
-    
+
+    // Spaceship's texture
+    shipTexture = loadTexture("textures/spaceship.jpg", false);
+
     // Asteroid texture
     asteroidTexture = loadTexture("textures/4k_makemake.jpg", false);
-
+    
     // Generate Default Flat Normal Map
     glGenTextures(1, &flatNormalMap);
     glBindTexture(GL_TEXTURE_2D, flatNormalMap);
@@ -1134,6 +1206,8 @@ int main(){
     // Init Random seed
     std::srand(static_cast<unsigned int>(std::time(0)));
 
+
+
     while (!glfwWindowShouldClose(window)) {
 
 
@@ -1141,7 +1215,7 @@ int main(){
 ** SECTION 11: FRAME LOGIC & CLEAR **
 ************************************/
 
-    //* Delta Time      
+    //* Delta Time    
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
@@ -1155,15 +1229,29 @@ int main(){
         saturnPos = calculateOrbit(sunPos, saturnOrbitRadius, saturnOrbitSpeed, currentFrame);
         uranusPos = calculateOrbit(sunPos, uranusOrbitRadius, uranusOrbitSpeed, currentFrame);
         neptunePos = calculateOrbit(sunPos, neptuneOrbitRadius, neptuneOrbitSpeed, currentFrame);
+
+        for (int i = 0; i < activeLasers.size(); i++) {
+            activeLasers[i].position += activeLasers[i].direction * activeLasers[i].speed * deltaTime;
+            activeLasers[i].lifeTime -= deltaTime;
+    
+            if (activeLasers[i].lifeTime <= 0) {
+                activeLasers.erase(activeLasers.begin() + i);
+                i--;
+            }
+        }
  
     //* Process Input
+        shipRoll = glm::mix(shipRoll, -mouseXOffset * 2.5f, deltaTime * 3.0f);
+        shipPitch = glm::mix(shipPitch, pitch * 0.05f, deltaTime * 2.0f);
+        mouseXOffset = glm::mix(mouseXOffset, 0.0f, deltaTime * 2.0f);
+
         processInput(window);
 
     //* Clear Buffers
         glClearColor(0.05f, 0.05f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // --- LOGICA JOC (NOU) ---
+    //* Game logic
     if (!isGameOver) {
         // Spawn asteroizi (la fiecare 2 secunde)
         if (currentFrame - lastSpawnTime > 2.0f) {
@@ -1232,18 +1320,13 @@ int main(){
     drawRing(mainShader, farProjection, view, saturnPos, saturnScale, saturnRingTexture);
     drawUranus(mainShader, farProjection, view);
     drawNeptune(mainShader, farProjection, view);
-    
-// --- THE TRICK: CLEAR DEPTH ---
-// This prevents the background from "cutting" anything we draw next.
-// It keeps the pixels on screen but resets the Z-buffer.
-    glClear(GL_DEPTH_BUFFER_BIT); 
 
-    glm::mat4 localProjection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 5000.0f);
+    drawLaser(mainShader, projection, view);
 
-    // (NOU) Deseneaza asteroizii
+    glClear(GL_DEPTH_BUFFER_BIT);
+    drawShip(mainShader, projection);
+
     drawDynamicAsteroids(mainShader, projection, view);
-
-    // (NOU) Tinta (Crucea)
     drawCrosshair(mainShader);
 
 /**********************************************
