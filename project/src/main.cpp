@@ -20,6 +20,8 @@
 
 #include <iostream>
 #include <vector>
+#include <cstdlib> // pt rand()
+#include <ctime>   // pt time()
 
 #include "Shader.h"
 
@@ -33,15 +35,15 @@ const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
 //* Camera Definition
-glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f, 3000.0f);
+glm::vec3 cameraPos    = glm::vec3(4500.0f, 0.0f, 0.0f);
 glm::vec3 cameraLookAt = glm::vec3(0.0f, 0.0f, -1.0f);
-glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
+glm::vec3 cameraUp     = glm::vec3(0.0f, 1.0f, 0.0f);
 
 //* Camera Movement
 float yaw   = -90.0f; 
 float pitch =  0.0f;
 float constantSpeed = 100.0f; 
-float cameraSpeed = 1000.0f;
+float cameraSpeed = 5000.0f;
 
 //* Mouse Cursor Control
 bool firstMouse = true;
@@ -52,6 +54,19 @@ float lastY =  SCR_HEIGHT / 2.0f;
 float deltaTime = 0.0f; 
 float lastFrame = 0.0f;
 float globalOrbitSpeed = 0.1f;
+
+// GAMEPLAY GLOBALS  
+bool isGameOver = false;
+float lastSpawnTime = 0.0f;
+
+struct Asteroid {
+    glm::vec3 position;
+    glm::vec3 velocity;
+    glm::vec3 rotationAxis;
+    float scale;
+    bool isActive;
+};
+std::vector<Asteroid> asteroids; // Lista dinamica
 
 //* Object data
 
@@ -109,21 +124,6 @@ float neptuneScale = 300.0f;
 float neptuneOrbitRadius = 16000.0f; 
 float neptuneOrbitSpeed = 0.006f*globalOrbitSpeed;
 
-
-// Cubes
-glm::vec3 asteroidPositions[] = {
-    glm::vec3( 0.0f,  0.0f, -5.0f), 
-    glm::vec3( 2.0f,  5.0f, -15.0f), 
-    glm::vec3(-1.5f, -2.2f, -2.5f),  
-    glm::vec3(-3.8f, -2.0f, -12.3f),  
-    glm::vec3( 2.4f, -0.4f, -3.5f),  
-    glm::vec3(-1.7f,  3.0f, -7.5f),  
-    glm::vec3( 1.3f, -2.0f, -2.5f),  
-    glm::vec3( 1.5f,  2.0f, -2.5f),  
-    glm::vec3( 1.5f,  0.2f, -1.5f),  
-    glm::vec3(-1.3f,  1.0f, -1.5f)  
-};
-
 //* GPU Resource Handles - Render IDs
     
     // --- VAO & VBO ---
@@ -131,6 +131,7 @@ glm::vec3 asteroidPositions[] = {
     unsigned int sphereIndexCount;
     unsigned int ringVAO, ringVBO;
     unsigned int shipVAO, shipVBO;
+    unsigned int crosshairVAO, crosshairVBO; // (NOU) Tinta
     
     // --- Universe Stars-Background ---
     unsigned int universeTexture;
@@ -174,6 +175,9 @@ glm::vec3 asteroidPositions[] = {
     // --- Defauld Flat Normal Map ---
     unsigned int flatNormalMap;
 
+    // --- ASTEROID TEXTURE  ---
+    unsigned int asteroidTexture;
+
     unsigned int asteroidVAO, asteroidVBO;
       
 
@@ -186,11 +190,78 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
+// RESET GAME LOGIC 
+void resetGame() {
+    asteroids.clear();
+    isGameOver = false;
+    cameraPos = glm::vec3(4500.0f, 0.0f, 0.0f);
+    std::cout << "GAME RESTARTED!" << std::endl;
+}
+
+// SHOOTING LOGIC  
+void shoot() {
+    if (isGameOver) return;
+    
+    for (auto &ast : asteroids) {
+        if (!ast.isActive) continue;
+
+        glm::vec3 toAst = ast.position - cameraPos;
+        float t = glm::dot(toAst, cameraLookAt);
+
+        if (t < 0.0f) continue; 
+
+        glm::vec3 pointOnRay = cameraPos + cameraLookAt * t;
+        float dist = glm::distance(pointOnRay, ast.position);
+
+        if (dist < ast.scale * 1.5f) {
+            ast.isActive = false; 
+            std::cout << "Asteroid Destroyed!" << std::endl;
+            break; 
+        }
+    }
+}
+
+// SPAWN LOGIC
+void spawnAsteroid() {
+    Asteroid a;
+    //Random position
+    float angle = (float)(rand() % 360);
+    float dist = 7000.0f + (rand() % 2000);
+    float height = (float)((rand() % 800) - 400);
+    
+    a.position = glm::vec3(std::sin(angle) * dist, height, std::cos(angle) * dist);
+    
+    // Speed towrds earth
+    glm::vec3 dir = glm::normalize(earthPos - a.position);
+    float speed = 400.0f + (rand() % 400);
+    a.velocity = dir * speed;
+    
+    a.rotationAxis = glm::normalize(glm::vec3(rand(), rand(), rand()));
+    a.scale = 25.0f + (rand() % 50);
+    a.isActive = true;
+    
+    asteroids.push_back(a);
+}
+
+//  INPUT CALLBACKS 
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        shoot();
+    }
+}
 
 //* Camera Keyboard Control 
 void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+    
+    // RESTART
+    if (isGameOver) {
+        if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
+            resetGame();
+        }
+        return; // Oprim miscarea daca e game over
+    }
 
     float speed = cameraSpeed * deltaTime; 
 
@@ -200,7 +271,7 @@ void processInput(GLFWwindow *window) {
         cameraPos -= speed * cameraLookAt;
 
     glm::vec3 rightVector = glm::normalize(glm::cross(cameraLookAt, cameraUp));
-    
+     
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         cameraPos += rightVector * speed;
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
@@ -214,6 +285,8 @@ void processInput(GLFWwindow *window) {
 
 //* Camera Cursor Control
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
+    if (isGameOver) return; // Blocare mouse la game over
+
     float xpos = static_cast<float>(xposIn);
     float ypos = static_cast<float>(yposIn);
 
@@ -264,7 +337,7 @@ unsigned int loadTexture(char const * path, bool isAlpha) {
 
     // Force 4 channels if isAlpha is true, otherwise let stb detect
     unsigned char *data = stbi_load(path, &width, &height, &nrComponents, isAlpha ? 4 : 0);
-    
+     
     if (data) {
         GLenum format;
         if (isAlpha) {
@@ -402,6 +475,21 @@ void setupNose() {
     glBindBuffer(GL_ARRAY_BUFFER, shipVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(noseVertices), noseVertices, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+}
+
+// Setup CROSSHAIR
+void setupCrosshair() {
+    float chVertices[] = {
+        -0.03f, 0.0f, 0.0f,   0.03f, 0.0f, 0.0f, // Orizontal
+         0.0f, -0.04f, 0.0f,  0.0f, 0.04f, 0.0f  // Vertical
+    };
+    glGenVertexArrays(1, &crosshairVAO);
+    glGenBuffers(1, &crosshairVBO);
+    glBindVertexArray(crosshairVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, crosshairVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(chVertices), chVertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 }
 
@@ -729,6 +817,7 @@ void drawSaturn(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 
 
 //* Saturn's Ring
+
 void drawRing(Shader &shader, glm::mat4 projection, glm::mat4 view, 
               glm::vec3 planetPos, float planetScale, unsigned int textureID) {
     
@@ -742,6 +831,7 @@ void drawRing(Shader &shader, glm::mat4 projection, glm::mat4 view,
 
     shader.use();
     shader.setBool("isSun", true);
+    shader.setBool("isRing", true); 
 
     // UNIFORMS: MATRICES
     shader.setMat4("view", view);
@@ -773,6 +863,7 @@ void drawRing(Shader &shader, glm::mat4 projection, glm::mat4 view,
     glEnable(GL_CULL_FACE); 
 }
 
+
 //* Uranus
 void drawUranus(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
@@ -800,6 +891,7 @@ void drawUranus(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
     glEnable(GL_CULL_FACE);
 }
+
 
 //* Neptun
 void drawNeptune(Shader &shader, glm::mat4 projection, glm::mat4 view) {
@@ -849,22 +941,57 @@ void drawSpaceshipNose(Shader &shader, glm::mat4 projection) {
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
-//* Cubes
-void drawAsteroids(Shader &shader, glm::mat4 projection, glm::mat4 view) {  
+// Dynamic Asteroids
+void drawDynamicAsteroids(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     shader.use();
-    shader.setBool("hasTexture", false);
+    shader.setBool("isSun", false); // Sa aiba umbre
+    shader.setBool("isRing", false);
+
     shader.setMat4("projection", projection);
     shader.setMat4("view", view);
+    
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, asteroidTexture);
+    shader.setInt("diffuseMap", 0);
+    
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, flatNormalMap);
+    shader.setInt("normalMap", 1);
 
-    glBindVertexArray(asteroidVAO);
-    for (unsigned int i = 0; i < 10; i++) {
+    glBindVertexArray(sphereVAO); // Folosim sferul pt aspect natural
+
+    for (const auto& ast : asteroids) {
+        if (!ast.isActive) continue;
+
         glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, asteroidPositions[i]);
-        float angle = 20.0f * (i + 1);
-        model = glm::rotate(model, (float)glfwGetTime() * glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+        model = glm::translate(model, ast.position);
+        
+        float angle = (float)glfwGetTime() * 50.0f;
+        model = glm::rotate(model, glm::radians(angle), ast.rotationAxis);
+        model = glm::scale(model, glm::vec3(ast.scale));
+
         shader.setMat4("model", model);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
     }
+}
+
+// Draw Crosshair
+void drawCrosshair(Shader &shader) {
+    glDisable(GL_DEPTH_TEST); 
+    shader.use();
+    shader.setBool("isSun", true); 
+    shader.setBool("isRing", false);
+
+    shader.setMat4("projection", glm::mat4(1.0f));
+    shader.setMat4("view", glm::mat4(1.0f));
+    shader.setMat4("model", glm::mat4(1.0f));
+
+    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, flatNormalMap); shader.setInt("diffuseMap", 0);
+
+    glBindVertexArray(crosshairVAO);
+    glDrawArrays(GL_LINES, 0, 4);
+
+    glEnable(GL_DEPTH_TEST);
 }
 
 
@@ -912,6 +1039,9 @@ int main(){
     // Set Mouse Callback
     glfwSetCursorPosCallback(window, mouse_callback);
 
+    // Callback Click Mouse
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
+
 
 /*********************************************
 ** SECTION 8: GLOBAL OPENGL CONFIGURATIONS  **
@@ -935,7 +1065,10 @@ int main(){
     setupNose();
 
     // Cubes model
-    // setupAsteroids();
+    setupAsteroids(); // (Folosit doar pt incarcarea VBO vechi, nu pt logica noua)
+    
+    // (NOU) Setup Crosshair
+    setupCrosshair();
 
 
 /****************************************************
@@ -988,6 +1121,9 @@ int main(){
     // Neptune's texture
     neptuneTexture = loadTexture("textures/2k_neptune.jpg", false);
     
+    // Asteroid texture
+    asteroidTexture = loadTexture("textures/4k_makemake.jpg", false);
+
     // Generate Default Flat Normal Map
     glGenTextures(1, &flatNormalMap);
     glBindTexture(GL_TEXTURE_2D, flatNormalMap);
@@ -995,6 +1131,8 @@ int main(){
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
     glGenerateMipmap(GL_TEXTURE_2D);
 
+    // Init Random seed
+    std::srand(static_cast<unsigned int>(std::time(0)));
 
     while (!glfwWindowShouldClose(window)) {
 
@@ -1003,7 +1141,7 @@ int main(){
 ** SECTION 11: FRAME LOGIC & CLEAR **
 ************************************/
 
-    //* Delta Time    
+    //* Delta Time      
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
@@ -1024,6 +1162,35 @@ int main(){
     //* Clear Buffers
         glClearColor(0.05f, 0.05f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // --- LOGICA JOC (NOU) ---
+    if (!isGameOver) {
+        // Spawn asteroizi (la fiecare 2 secunde)
+        if (currentFrame - lastSpawnTime > 2.0f) {
+            spawnAsteroid();
+            lastSpawnTime = currentFrame;
+        }
+
+        for (auto &ast : asteroids) {
+            if (!ast.isActive) continue;
+
+            // Miscarea asteroidului
+            ast.position += ast.velocity * deltaTime;
+
+            // Coliziune Pamant
+            float distToEarth = glm::distance(earthPos, ast.position);
+            // Pamantul are scale 100 (radius ~50), asteroid ~25 + margine
+            if (distToEarth < (50.0f + ast.scale)) {
+                std::cout << "GAME OVER! Press R to Restart." << std::endl;
+                isGameOver = true;
+            }
+
+            // Cleanup (daca se duce prea departe)
+            if (glm::distance(sunPos, ast.position) > 20000.0f) {
+                ast.isActive = false;
+            }
+        }
+    }
 
 
 /***********************************************
@@ -1049,6 +1216,7 @@ int main(){
     glm::mat4 farProjection = glm::perspective(glm::radians(45.0f), aspect, 10.0f, farLimit);
 
     mainShader.use();
+    mainShader.setBool("isRing", false); 
     mainShader.setVec3("sunPos", sunPos);
     mainShader.setVec3("viewPos", cameraPos);
 
@@ -1072,7 +1240,11 @@ int main(){
 
     glm::mat4 localProjection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 5000.0f);
 
-    //drawSpaceshipNose(mainShader, localProjection);
+    // (NOU) Deseneaza asteroizii
+    drawDynamicAsteroids(mainShader, projection, view);
+
+    // (NOU) Tinta (Crucea)
+    drawCrosshair(mainShader);
 
 /**********************************************
 ** SECTION 14: BUFFER SWAP AND EVENT POLLING **
