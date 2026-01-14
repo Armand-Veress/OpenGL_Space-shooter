@@ -21,6 +21,7 @@
 #include <ctime>
 #include <iostream>
 #include <vector>
+#include <algorithm>
 
 #include "Shader.h"
 
@@ -34,7 +35,7 @@ const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
 //* Camera Definition
-glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f, 3000.0f);
+glm::vec3 cameraPos   = glm::vec3(45000.0f, 0.0f, 0.0f);
 glm::vec3 cameraLookAt = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 
@@ -129,17 +130,25 @@ float shipLength = 5.0f;
 float shipWidth = 0.5f;
 float shipHeight = 0.1;
 
+struct Explosion {
+    glm::vec3 position;
+    float size;
+    float alpha;
+    float lifeTime;
+    float maxSize;
+};
+std::vector<Explosion> activeExplosions;
 
 struct LaserBeam {
     glm::vec3 position;
     glm::vec3 direction;
     float speed;
     float lifeTime;
+    std::vector<glm::vec3> trail;
 };
 std::vector<LaserBeam> activeLasers;
-float laserSpeed = 50.0f;
-float laserThickness = 0.02f; 
-float laserLength = 20.0f;
+float laserSpeed = 5000.0f;
+float laserSize = 0.25f;
 float lastShotTime = 0.0f;
 
 float shipRoll = 0.0f;  // Z-axis
@@ -218,34 +227,11 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 // RESET GAME LOGIC 
 void resetGame() {
     asteroids.clear();
+    activeLasers.clear();
     isGameOver = false;
     cameraPos = glm::vec3(4500.0f, 0.0f, 0.0f);
     std::cout << "GAME RESTARTED!" << std::endl;
 }
-
-// SHOOTING LOGIC  
-void shoot() {
-    if (isGameOver) return;
-    
-    for (auto &ast : asteroids) {
-        if (!ast.isActive) continue;
-
-        glm::vec3 toAst = ast.position - cameraPos;
-        float t = glm::dot(toAst, cameraLookAt);
-
-        if (t < 0.0f) continue; 
-
-        glm::vec3 pointOnRay = cameraPos + cameraLookAt * t;
-        float dist = glm::distance(pointOnRay, ast.position);
-
-        if (dist < ast.scale * 1.5f) {
-            ast.isActive = false; 
-            std::cout << "Asteroid Destroyed!" << std::endl;
-            break; 
-        }
-    }
-}
-
 
 // SPAWN LOGIC
 void spawnAsteroid() {
@@ -267,13 +253,6 @@ void spawnAsteroid() {
     a.isActive = true;
     
     asteroids.push_back(a);
-}
-
-//  INPUT CALLBACKS 
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        shoot();
-    }
 }
 
 //* Camera Keyboard Control -- Movement & Steering
@@ -337,7 +316,7 @@ void processInput(GLFWwindow *window) {
 }
 
 //* Camera Cursor Control
-// LABEL: Mouse Direction Control
+//  Mouse Direction Control
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
     float xpos = static_cast<float>(xposIn);
     float ypos = static_cast<float>(yposIn);
@@ -995,23 +974,119 @@ void drawShip(Shader &shader, glm::mat4 projection) {
 void drawLaser(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     shader.use();
     shader.setBool("isSun", true);
-    shader.setVec3("customColor", glm::vec3(0.0f, 1.0f, 0.5f)); 
+    shader.setBool("useColor", true);
+
+    // ACTIVĂM TRANSPARENȚA
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE); // Dezactivăm scrierea în Depth Buffer pentru a evita artefactele de trail
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     for (const auto& laser : activeLasers) {
+        if (glm::distance(laser.position, cameraPos) < 15.0f) continue;
+
+        // --- 1. MIEZUL BIILEI (Opacitate mare) ---
+        shader.setVec3("customColor", glm::vec3(1.0f, 0.5f, 1.0f)); // Mov spre alb în centru
+        shader.setFloat("alpha", 1.0f); 
+        
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, laser.position);
-        
-        // Aliniem cilindrul cu direcția de zbor
-        model = model * glm::inverse(glm::lookAt(glm::vec3(0.0f), laser.direction, glm::vec3(0.0f, 1.0f, 0.0f)));
-        model = glm::scale(model, glm::vec3(laserThickness, laserThickness, laserLength));
-
-        shader.setMat4("view", view); // ATENȚIE: Folosim View-ul real, nu identitate!
-        shader.setMat4("projection", projection);
+        float pulse = 2.5f + 0.2f * std::sin((float)glfwGetTime() * 15.0f);
+        model = glm::scale(model, glm::vec3(pulse));
         shader.setMat4("model", model);
-
         glBindVertexArray(sphereVAO);
         glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+
+        // --- 2. EFECTUL DE GLOW (Sferă mai mare și transparentă) ---
+        shader.setVec3("customColor", glm::vec3(0.5f, 0.0f, 0.5f)); // Mov închis la margini
+        shader.setFloat("alpha", 0.3f); // Foarte transparent
+        
+        glm::mat4 glowModel = glm::mat4(1.0f);
+        glowModel = glm::translate(glowModel, laser.position);
+        glowModel = glm::scale(glowModel, glm::vec3(pulse * 1.8f)); // Cu 80% mai mare decât miezul
+        shader.setMat4("model", glowModel);
+        glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+
+        // --- 3. TRAIL-UL CU FADE (Opacitate descrescătoare) ---
+        for (size_t j = 0; j < laser.trail.size(); j++) {
+            float trailAlpha = (float)j / laser.trail.size() * 0.4f; // Devine mai transparent spre coadă
+            shader.setFloat("alpha", trailAlpha);
+            
+            glm::mat4 trailModel = glm::mat4(1.0f);
+            trailModel = glm::translate(trailModel, laser.trail[j]);
+            float trailScale = ((float)j / laser.trail.size()) * 1.8f; 
+            trailModel = glm::scale(trailModel, glm::vec3(trailScale));
+            
+            shader.setMat4("model", trailModel);
+            glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+        }
     }
+
+    // RESETARE STARE
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    shader.setBool("isSun", false);
+    shader.setFloat("alpha", 1.0f);
+    shader.setVec3("customColor", glm::vec3(1.0f, 1.0f, 1.0f));
+    shader.setBool("useColor", false);
+}
+
+// EXPLOSIONS
+void drawExplosions(Shader &shader, glm::mat4 projection, glm::mat4 view) {
+    if (activeExplosions.empty()) return;
+
+    shader.use();
+    shader.setBool("isSun", true);
+    shader.setBool("useColor", true);
+    
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE); 
+    glDepthMask(GL_FALSE);
+
+    for (const auto& exp : activeExplosions) {
+        // Calculăm un factor de progres bazat pe mărimea actuală față de maxim
+        // (ne ajută să vedem evoluția creșterii)
+        float growthFactor = exp.size / exp.maxSize;
+
+        // --- LAYER 1: Aura Exterioară (MOV) ---
+        // Crește de la 0.25 până la 1.0 (mărimea maximă a asteroidului/exploziei)
+        float auraStart = exp.maxSize * 0.25f;
+        float auraCurrent = glm::mix(auraStart, exp.maxSize, growthFactor);
+
+        glm::mat4 modelAura = glm::mat4(1.0f);
+        modelAura = glm::translate(modelAura, exp.position);
+        modelAura = glm::scale(modelAura, glm::vec3(auraCurrent));
+
+        shader.setMat4("model", modelAura);
+        shader.setVec3("customColor", glm::vec3(0.5f, 0.0f, 1.0f)); 
+        shader.setFloat("alpha", exp.alpha * 0.4f);
+        
+        glBindVertexArray(sphereVAO);
+        glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+
+        // --- LAYER 2: Nucleul Central (ALB) ---
+        // Crește de la 0.15 până la 0.4 din mărimea maximă
+        float coreStart = exp.maxSize * 0.15f;
+        float coreEnd   = exp.maxSize * 0.40f;
+        float coreCurrent = glm::mix(coreStart, coreEnd, growthFactor);
+
+        glm::mat4 modelCore = glm::mat4(1.0f);
+        modelCore = glm::translate(modelCore, exp.position);
+        modelCore = glm::scale(modelCore, glm::vec3(coreCurrent));
+
+        shader.setMat4("model", modelCore);
+        shader.setVec3("customColor", glm::vec3(1.0f, 1.0f, 1.0f)); 
+        shader.setFloat("alpha", exp.alpha); 
+        
+        glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+    }
+
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    shader.setBool("isSun", false);
+    shader.setBool("useColor", false);
 }
 
 // Dynamic Asteroids
@@ -1053,6 +1128,7 @@ void drawCrosshair(Shader &shader) {
     glDisable(GL_DEPTH_TEST); 
     shader.use();
     shader.setBool("isSun", true); 
+    shader.setBool("useColor", true);
     shader.setBool("isRing", false);
 
     shader.setMat4("projection", glm::mat4(1.0f));
@@ -1065,6 +1141,7 @@ void drawCrosshair(Shader &shader) {
     glDrawArrays(GL_LINES, 0, 4);
 
     glEnable(GL_DEPTH_TEST);
+    shader.setBool("useColor", false);
 }
 
 int main(){
@@ -1114,7 +1191,6 @@ int main(){
 
     // Set Mouse Callback
     glfwSetCursorPosCallback(window, mouse_callback);
-
 
 /*********************************************
 ** SECTION 8: GLOBAL OPENGL CONFIGURATIONS  **
@@ -1230,55 +1306,111 @@ int main(){
         uranusPos = calculateOrbit(sunPos, uranusOrbitRadius, uranusOrbitSpeed, currentFrame);
         neptunePos = calculateOrbit(sunPos, neptuneOrbitRadius, neptuneOrbitSpeed, currentFrame);
 
-        for (int i = 0; i < activeLasers.size(); i++) {
-            activeLasers[i].position += activeLasers[i].direction * activeLasers[i].speed * deltaTime;
-            activeLasers[i].lifeTime -= deltaTime;
-    
-            if (activeLasers[i].lifeTime <= 0) {
-                activeLasers.erase(activeLasers.begin() + i);
-                i--;
-            }
-        }
- 
-    //* Process Input
-        shipRoll = glm::mix(shipRoll, -mouseXOffset * 2.5f, deltaTime * 3.0f);
-        shipPitch = glm::mix(shipPitch, pitch * 0.05f, deltaTime * 2.0f);
-        mouseXOffset = glm::mix(mouseXOffset, 0.0f, deltaTime * 2.0f);
 
-        processInput(window);
-
-    //* Clear Buffers
-        glClearColor(0.05f, 0.05f, 0.1f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    //* Game logic
-    if (!isGameOver) {
-        // Spawn asteroizi (la fiecare 2 secunde)
+        if (!isGameOver) {
+        
+        // --- SPAWN ASTEROIDS ---
         if (currentFrame - lastSpawnTime > 2.0f) {
             spawnAsteroid();
             lastSpawnTime = currentFrame;
         }
 
+        // --- UPDATE ASTEROIDS (Mişcare şi Coliziune Pământ) ---
         for (auto &ast : asteroids) {
-            if (!ast.isActive) continue;
-
-            // Miscarea asteroidului
+            //if (!ast.isActive) 
+            continue; 
+            // Mișcare liniară
             ast.position += ast.velocity * deltaTime;
 
-            // Coliziune Pamant
+            // Coliziune cu Pământul (Game Over)
             float distToEarth = glm::distance(earthPos, ast.position);
-            // Pamantul are scale 100 (radius ~50), asteroid ~25 + margine
             if (distToEarth < (50.0f + ast.scale)) {
-                std::cout << "GAME OVER! Press R to Restart." << std::endl;
+                std::cout << "GAME OVER! Earth has been hit." << std::endl;
                 isGameOver = true;
             }
 
-            // Cleanup (daca se duce prea departe)
-            if (glm::distance(sunPos, ast.position) > 20000.0f) {
+            // Cleanup dacă asteroidul se îndepărtează prea mult de sistemul solar
+            if (glm::distance(sunPos, ast.position) > 25000.0f) {
                 ast.isActive = false;
             }
         }
+
+        // --- UPDATE LASERS & COLLISION DETECTION (Sistemul de Blitz integrat) ---
+        for (int i = 0; i < activeLasers.size(); i++) {
+            // Actualizare Trail (Dâra de lumină)
+            activeLasers[i].trail.push_back(activeLasers[i].position);
+            if (activeLasers[i].trail.size() > 15) { 
+                activeLasers[i].trail.erase(activeLasers[i].trail.begin());
+            }
+
+            // Mișcare Laser
+            activeLasers[i].position += activeLasers[i].direction * activeLasers[i].speed * deltaTime;
+            activeLasers[i].lifeTime -= deltaTime;
+
+            // Verificare Coliziune Laser vs Asteroizi
+            for (auto &ast : asteroids) {
+                if (!ast.isActive) continue;
+
+                float dist = glm::distance(activeLasers[i].position, ast.position);
+                if (dist < (ast.scale * 2.5f)) {
+                    ast.isActive = false;           // Distrugem asteroidul
+                    activeLasers[i].lifeTime = 0;   // Distrugem laserul la impact
+
+                    // --- CREARE EFECT IMPACT (BLITZ) ---
+                    Explosion exp;
+                    exp.position = ast.position;
+                    exp.size = 1.0f;               
+                    exp.maxSize = ast.scale * 5.0f; 
+                    exp.alpha = 1.0f;
+                    exp.lifeTime = 0.4f;
+                    activeExplosions.push_back(exp);
+
+                    std::cout << "BOOM! Target Neutralized." << std::endl;
+                    break; // Ieșim din bucla de asteroizi pentru acest laser
+                }
+            }
+
+            // Ștergere laser expirat
+            if (activeLasers[i].lifeTime <= 0) {
+                activeLasers.erase(activeLasers.begin() + i);
+                i--;
+            }
+        }
+
+        // --- CLEANUP ASTEROIDS (Erase-Remove idiom) ---
+        asteroids.erase(std::remove_if(asteroids.begin(), asteroids.end(),
+            [](const Asteroid& a) { return !a.isActive; }), asteroids.end());
     }
+
+    for (int i = 0; i < activeExplosions.size(); i++) {
+    // Expansiune lină către maxSize
+    if (activeExplosions[i].size < activeExplosions[i].maxSize) {
+        // Se apropie de maxSize cu o viteză care scade pe măsură ce ajunge la țintă
+        float diff = activeExplosions[i].maxSize - activeExplosions[i].size;
+        activeExplosions[i].size += diff * 15.0f * deltaTime; 
+    }
+
+    activeExplosions[i].alpha -= 2.0f * deltaTime;
+    activeExplosions[i].lifeTime -= deltaTime;
+
+    if (activeExplosions[i].lifeTime <= 0 || activeExplosions[i].alpha <= 0) {
+        activeExplosions.erase(activeExplosions.begin() + i);
+        i--;
+    }
+}
+    //* Process Input
+        shipRoll = glm::mix(shipRoll, -mouseXOffset * 5.0f, deltaTime * 3.0f);
+        shipPitch = glm::mix(shipPitch, mouseYOffset * 5.0f, deltaTime * 3.0f);
+
+    // Decay: Face nava să revină la centru când nu mai miști mouse-ul/tastele
+        mouseXOffset = glm::mix(mouseXOffset, 0.0f, deltaTime * 2.0f);
+        mouseYOffset = glm::mix(mouseYOffset, 0.0f, deltaTime * 2.0f);
+        
+        processInput(window);
+
+    //* Clear Buffers
+        glClearColor(0.05f, 0.05f, 0.1f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 
 /***********************************************
@@ -1321,12 +1453,12 @@ int main(){
     drawUranus(mainShader, farProjection, view);
     drawNeptune(mainShader, farProjection, view);
 
+    drawDynamicAsteroids(mainShader, projection, view);
     drawLaser(mainShader, projection, view);
+    drawExplosions(mainShader, projection, view);
 
     glClear(GL_DEPTH_BUFFER_BIT);
     drawShip(mainShader, projection);
-
-    drawDynamicAsteroids(mainShader, projection, view);
     drawCrosshair(mainShader);
 
 /**********************************************

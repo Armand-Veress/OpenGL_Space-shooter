@@ -10,11 +10,17 @@ uniform sampler2D normalMap;  // The purple detail map
 uniform vec3 sunPos;          // Position of your Sun light
 uniform vec3 viewPos;         // Camera position (for shininess/specular)
 uniform bool isSun;           // To skip lighting if we are drawing the Sun itself
+uniform vec3 customColor;
+uniform bool useColor;
+uniform float alpha;
 
 void main() {
     if(isSun) {
-        // The Sun just glows with its own texture
-        FragColor = texture(diffuseMap, TexCoords);
+        if(useColor) {
+            FragColor = vec4(customColor, alpha);
+        } else {
+            FragColor = texture(diffuseMap, TexCoords);
+        }
     } else {
         // 1. UNPACK NORMAL: Get purple color [0,1] and convert to vector [-1,1]
         vec3 normal = texture(normalMap, TexCoords).rgb;
@@ -24,8 +30,8 @@ void main() {
         normal = normalize(TBN * normal);
 
         // 3. LIGHTING CALCULATIONS
-        // Ambient (base dark light)
-        vec3 ambient = 0.05 * vec3(1.0);
+        // Ambient 
+        vec3 ambient = 0.15 * vec3(1.0);
         
         // Diffuse (sunlight hitting the surface)
         vec3 lightDir = normalize(sunPos - FragPos);
