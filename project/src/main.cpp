@@ -63,6 +63,7 @@ struct Asteroid {
     glm::vec3 position;
     glm::vec3 velocity;
     glm::vec3 rotationAxis;
+    float rotationSpeed;
     float scale;
     bool isActive;
 };
@@ -130,6 +131,24 @@ float shipLength = 5.0f;
 float shipWidth = 0.5f;
 float shipHeight = 0.1;
 
+float shipRoll = 0.0f;  // Z-axis
+float shipPitch = 0.0f; // X-axis
+float mouseXOffset = 0.0f;
+float mouseYOffset = 0.0f;
+
+
+// Ship control
+float targetYawSpeed = 0.0f;
+float targetPitchSpeed = 0.0f;
+float currentYawSpeed = 0.0f;
+float currentPitchSpeed = 0.0f;
+
+float lerpFactor = 5.0f; // Cu cât e mai mic, cu atât nava e mai "greoaie"
+float mouseSensitivity = 0.15f; 
+float keyboardSensitivity = 60.0f;
+float mouseXVel = 0.0f;
+float mouseYVel = 0.0f;
+
 struct Explosion {
     glm::vec3 position;
     float size;
@@ -151,10 +170,13 @@ float laserSpeed = 5000.0f;
 float laserSize = 0.25f;
 float lastShotTime = 0.0f;
 
-float shipRoll = 0.0f;  // Z-axis
-float shipPitch = 0.0f; // X-axis
-float mouseXOffset = 0.0f;
-float mouseYOffset = 0.0f;
+
+// Ateroids
+float spawnDistance = 8000.0f; 
+float minAsteroidSpeed = 30.0f;
+float maxAsteroidSpeed = 100.0f;
+float minAsteroidSize = 10.0f;
+float maxAsteroidSize = 75.0f;
 
 //* GPU Resource Handles - Render IDs
     
@@ -236,22 +258,73 @@ void resetGame() {
 // SPAWN LOGIC
 void spawnAsteroid() {
     Asteroid a;
-    //Random position
-    float angle = (float)(rand() % 360);
-    float dist = 7000.0f + (rand() % 2000);
-    float height = (float)((rand() % 800) - 400);
-    
-    a.position = glm::vec3(std::sin(angle) * dist, height, std::cos(angle) * dist);
-    
-    // Speed towrds earth
-    glm::vec3 dir = glm::normalize(earthPos - a.position);
-    float speed = 400.0f + (rand() % 400);
-    a.velocity = dir * speed;
-    
-    a.rotationAxis = glm::normalize(glm::vec3(rand(), rand(), rand()));
-    a.scale = 25.0f + (rand() % 50);
+    bool validSpawn = false;
+    glm::vec3 spawnPos;
+    glm::vec3 dirToEarth;
+
+    // [ITERATION LOOP: ENSURE CLEAR PATH]
+    while (!validSpawn) {
+        // [SPHERE MAPPING: 3D COORDINATES]
+        float theta = ((float)rand() / RAND_MAX) * 2.0f * 3.14159f; 
+        float phi = acos(2.0f * ((float)rand() / RAND_MAX) - 1.0f); 
+
+        spawnPos.x = spawnDistance * sin(phi) * cos(theta);
+        spawnPos.y = spawnDistance * sin(phi) * sin(theta);
+        spawnPos.z = spawnDistance * cos(phi);
+
+        dirToEarth = glm::normalize(earthPos - spawnPos);
+        validSpawn = true;
+
+        // [OBSTACLE DEFINITIONS: PLANETS & SUN]
+        struct Obstacle { glm::vec3 pos; float radius; };
+        std::vector<Obstacle> planets = {
+            {sunPos, 850.0f},      
+            {mercuryPos, 200.0f},
+            {venusPos, 400.0f},
+            {marsPos, 400.0f},
+            {jupiterPos, 1100.0f}, 
+            {saturnPos, 950.0f}
+        };
+
+        // [TRAJECTORY CHECK: RAY-SPHERE INTERSECTION]
+        float distToEarth = glm::distance(spawnPos, earthPos);
+        for (auto& p : planets) {
+            glm::vec3 L = p.pos - spawnPos;
+            float t = glm::dot(L, dirToEarth);
+            
+            if (t > 0 && t < distToEarth) { 
+                glm::vec3 closestPoint = spawnPos + dirToEarth * t;
+                float d = glm::distance(p.pos, closestPoint);
+                
+                if (d < p.radius) { 
+                    validSpawn = false; 
+                    break;
+                }
+            }
+        }
+    }
+
+    // [SIZE INITIALIZATION]
+    a.scale = minAsteroidSize + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (maxAsteroidSize - minAsteroidSize)));
+
+    // [VELOCITY INITIALIZATION]
+    float speed = minAsteroidSpeed + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (maxAsteroidSpeed - minAsteroidSpeed)));
+    a.position = spawnPos;
+    a.velocity = dirToEarth * speed;
     a.isActive = true;
+
+    // [ROTATION LOGIC: TUMBLING TOWARD EARTH]
+    // Generate a side vector perpendicular to the movement direction
+    glm::vec3 upRef = (fabs(dirToEarth.y) < 0.9f) ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
+    glm::vec3 rollAxis = glm::normalize(glm::cross(dirToEarth, upRef));
     
+    // Add a slight random wobble (10%) so it doesn't look like a perfect wheel
+    glm::vec3 wobble = glm::normalize(glm::vec3((rand()%10)/10.0f, (rand()%10)/10.0f, (rand()%10)/10.0f));
+    a.rotationAxis = glm::normalize(glm::mix(rollAxis, wobble, 0.1f));
+
+    // Rotation speed slightly affected by movement speed for realism
+    a.rotationSpeed = 0.5f + (speed / 400.0f) + (static_cast<float>(rand() % 100) / 50.0f);
+
     asteroids.push_back(a);
 }
 
@@ -260,7 +333,7 @@ void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
-    // Constant Forward Speed with Boost
+    // [MOVEMENT]
     float currentSpeed = cameraSpeed;
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || 
         glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
@@ -268,28 +341,32 @@ void processInput(GLFWwindow *window) {
     }
     cameraPos += cameraLookAt * currentSpeed * deltaTime;
 
-    // Rotation Speed for Keys
-    float rotationStep = 50.0f * deltaTime;
+    // [ROTATION TARGETS]
+    targetPitchSpeed = 0.0f;
+    targetYawSpeed = 0.0f;
 
-    // WSAD mapping to Pitch and Yaw (Virtual Mouse)
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-        pitch += rotationStep;     // Rotate World Up
-        mouseYOffset = 2.0f;       // Visual Lag Up
-    }
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-        pitch -= rotationStep;     // Rotate World Down
-        mouseYOffset = -2.0f;      // Visual Lag Down
-    }
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-        yaw -= rotationStep;       // Rotate World Left
-        mouseXOffset = -2.0f;      // Visual Roll Left
-    }
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-        yaw += rotationStep;       // Rotate World Right
-        mouseXOffset = 2.0f;       // Visual Roll Right
-    }
+    // Add Keyboard input to targets
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) targetPitchSpeed = keyboardSensitivity;
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) targetPitchSpeed = -keyboardSensitivity;
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) targetYawSpeed = -keyboardSensitivity;
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) targetYawSpeed = keyboardSensitivity;
 
-    // Constraints & Vector Update
+    // Add Mouse velocity to targets (accumulated from callback)
+    targetYawSpeed += mouseXVel;
+    targetPitchSpeed += mouseYVel;
+
+    // [LERP / SMOOTHING]
+    currentPitchSpeed = glm::mix(currentPitchSpeed, targetPitchSpeed, lerpFactor * deltaTime);
+    currentYawSpeed = glm::mix(currentYawSpeed, targetYawSpeed, lerpFactor * deltaTime);
+
+    yaw   += currentYawSpeed * deltaTime;
+    pitch += currentPitchSpeed * deltaTime;
+
+    // Reset mouse accumulation after applying
+    mouseXVel = 0.0f;
+    mouseYVel = 0.0f;
+
+    // [CONSTRAINTS & VECTORS]
     if (pitch > 89.0f) pitch = 89.0f;
     if (pitch < -89.0f) pitch = -89.0f;
 
@@ -299,7 +376,11 @@ void processInput(GLFWwindow *window) {
     front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
     cameraLookAt = glm::normalize(front);
 
-    // Laser Control
+    // [VISUAL LAG]
+    mouseXOffset = currentYawSpeed * 0.05f;
+    mouseYOffset = currentPitchSpeed * 0.05f;
+
+    // [LASER LOGIC - REMAINS SAME]
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS || 
         glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
         float currentTime = (float)glfwGetTime();
@@ -315,8 +396,6 @@ void processInput(GLFWwindow *window) {
     }
 }
 
-//* Camera Cursor Control
-//  Mouse Direction Control
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
     float xpos = static_cast<float>(xposIn);
     float ypos = static_cast<float>(yposIn);
@@ -327,29 +406,13 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
     }
 
     float xoffset = xpos - lastX;
-    float yoffset = ypos - lastY; 
+    float yoffset = ypos - lastY;
     lastX = xpos; lastY = ypos;
 
-    float sensitivity = 0.05f; 
-    xoffset *= sensitivity;
-    yoffset *= sensitivity;
-
-    mouseXOffset = xoffset; 
-    mouseYOffset = -yoffset;
-
-    yaw   += xoffset;
-    pitch -= yoffset;
-
-    // Clamp Pitch
-    if (pitch > 89.0f)  pitch = 89.0f;
-    if (pitch < -89.0f) pitch = -89.0f;
-
-    // Calculate Look Vector
-    glm::vec3 front;
-    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-    front.y = sin(glm::radians(pitch));
-    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-    cameraLookAt = glm::normalize(front);
+    // Accumulate the movement (multiplied by sensitivity)
+    // We don't divide by deltaTime here to avoid NaN spikes
+    mouseXVel = xoffset * mouseSensitivity * 100.0f; 
+    mouseYVel = -yoffset * mouseSensitivity * 100.0f;
 }
 
 /*********************************
@@ -1317,23 +1380,36 @@ int main(){
 
         // --- UPDATE ASTEROIDS (Mişcare şi Coliziune Pământ) ---
         for (auto &ast : asteroids) {
-            //if (!ast.isActive) 
-            continue; 
-            // Mișcare liniară
-            ast.position += ast.velocity * deltaTime;
+    if (!ast.isActive) continue; 
 
-            // Coliziune cu Pământul (Game Over)
-            float distToEarth = glm::distance(earthPos, ast.position);
-            if (distToEarth < (50.0f + ast.scale)) {
-                std::cout << "GAME OVER! Earth has been hit." << std::endl;
-                isGameOver = true;
-            }
+    // [1] HOMING: Constantly re-aim at Earth's current orbital position
+    glm::vec3 currentDir = glm::normalize(earthPos - ast.position);
+    float currentSpeed = glm::length(ast.velocity); 
+    
+    // Safety check: ensure speed isn't zero
+    if (currentSpeed < minAsteroidSpeed) currentSpeed = minAsteroidSpeed;
+    
+    ast.velocity = currentDir * currentSpeed;
+    ast.position += ast.velocity * deltaTime;
 
-            // Cleanup dacă asteroidul se îndepărtează prea mult de sistemul solar
-            if (glm::distance(sunPos, ast.position) > 25000.0f) {
-                ast.isActive = false;
-            }
-        }
+    // [2] COLLISION DETECTION (Earth)
+    float distToEarth = glm::distance(earthPos, ast.position);
+    float collisionThreshold = (earthScale * 0.5f) + (ast.scale * 0.5f);
+    
+    if (distToEarth < collisionThreshold) {
+        std::cout << "GAME OVER! Earth has been hit." << std::endl;
+        isGameOver = true;
+    }
+
+    // [3] CLEANUP: Remove if it somehow flies past the universe boundaries
+    if (glm::distance(sunPos, ast.position) > universeScale * 2.0f) {
+        ast.isActive = false;
+    }
+}
+
+// [4] ERASE-REMOVE: Physically delete inactive asteroids from the vector
+asteroids.erase(std::remove_if(asteroids.begin(), asteroids.end(),
+    [](const Asteroid& a) { return !a.isActive; }), asteroids.end());
 
         // --- UPDATE LASERS & COLLISION DETECTION (Sistemul de Blitz integrat) ---
         for (int i = 0; i < activeLasers.size(); i++) {
