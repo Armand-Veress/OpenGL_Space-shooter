@@ -13,8 +13,24 @@ uniform bool isSun;           // To skip lighting if we are drawing the Sun itse
 uniform vec3 customColor;
 uniform bool useColor;
 uniform float alpha;
+uniform bool isSaturnRing;
 
 void main() {
+    if (isSaturnRing) {
+        // Coordonatele centrului
+        vec2 center = vec2(0.5, 0.5);
+        float dist = distance(TexCoords, center);
+        
+        // Ajustăm raza de decupare: 
+        // 0.5 = cerc care atinge marginile
+        // 0.45 sau mai mic = cerc mai "strâns", care nu va mai fi tăiat de marginile pătratului
+        float outerRadius = 0.30; 
+
+        if (dist > outerRadius || FragColor.a < 0.1) {
+            discard; 
+        }
+    }
+
     if(isSun) {
         if(useColor) {
             FragColor = vec4(customColor, alpha);
@@ -31,7 +47,7 @@ void main() {
 
         // 3. LIGHTING CALCULATIONS
         // Ambient 
-        vec3 ambient = 0.15 * vec3(1.0);
+        vec3 ambient = 0.20 * vec3(1.0);
         
         // Diffuse (sunlight hitting the surface)
         vec3 lightDir = normalize(sunPos - FragPos);

@@ -25,6 +25,11 @@
 
 #include "Shader.h"
 
+//* IMGUI
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include "UI.h"
 
 /********************************
 ** SECTION 2: GLOBAL VARIABLES **
@@ -59,6 +64,11 @@ float globalOrbitSpeed = 0.1f;
 bool isGameOver = false;
 float lastSpawnTime = 0.0f;
 
+int destroyedAsteroids = 0;
+float gameStartTime = 0.0f;
+float survivalTime = 0.0f;
+float gameScore = 0.0f;
+
 struct Asteroid {
     glm::vec3 position;
     glm::vec3 velocity;
@@ -68,6 +78,10 @@ struct Asteroid {
     bool isActive;
 };
 std::vector<Asteroid> asteroids; 
+
+bool earthIsHit = false;
+float flashAlpha = 0.0f;
+float flashSpeed = 0.8f;
 
 //* Object data
 
@@ -170,6 +184,11 @@ float laserSpeed = 5000.0f;
 float laserSize = 0.25f;
 float lastShotTime = 0.0f;
 
+struct PlanetCollision {
+    glm::vec3 position;
+    float radius;
+};
+
 
 // Ateroids
 float spawnDistance = 8000.0f; 
@@ -250,9 +269,11 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 void resetGame() {
     asteroids.clear();
     activeLasers.clear();
+    destroyedAsteroids = 0;
+    survivalTime = 0.0f;
+    gameStartTime = (float)glfwGetTime(); // Resetăm ceasul
     isGameOver = false;
     cameraPos = glm::vec3(4500.0f, 0.0f, 0.0f);
-    std::cout << "GAME RESTARTED!" << std::endl;
 }
 
 // SPAWN LOGIC
@@ -308,7 +329,8 @@ void spawnAsteroid() {
     a.scale = minAsteroidSize + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (maxAsteroidSize - minAsteroidSize)));
 
     // [VELOCITY INITIALIZATION]
-    float speed = minAsteroidSpeed + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (maxAsteroidSpeed - minAsteroidSpeed)));
+    float speedMultiplier = 1.0f + (survivalTime * 0.005f); // Crește cu 0.5% pe secundă
+    float speed = (minAsteroidSpeed + static_cast<float>(rand() % (int)(maxAsteroidSpeed - minAsteroidSpeed))) * speedMultiplier;
     a.position = spawnPos;
     a.velocity = dirToEarth * speed;
     a.isActive = true;
@@ -918,6 +940,7 @@ void drawRing(Shader &shader, glm::mat4 projection, glm::mat4 view,
 
     shader.use();
     shader.setBool("isSun", true);
+    shader.setBool("isSaturnRing", true);
 
     // UNIFORMS: MATRICES
     shader.setMat4("view", view);
@@ -925,7 +948,7 @@ void drawRing(Shader &shader, glm::mat4 projection, glm::mat4 view,
     
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, planetPos); 
-    float ringScale = planetScale * 2.2f; 
+    float ringScale = planetScale * 5.0f; 
     model = glm::scale(model, glm::vec3(ringScale, 1.0f, ringScale));
     shader.setMat4("model", model);
 
@@ -944,6 +967,8 @@ void drawRing(Shader &shader, glm::mat4 projection, glm::mat4 view,
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
     // RESTORE STATE
+    shader.setBool("isSaturnRing", false);
+
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
     glEnable(GL_CULL_FACE); 
@@ -1238,6 +1263,16 @@ int main(){
         return -1;
     }
 
+// --- [IMGUI INITIALIZATION] ---
+IMGUI_CHECKVERSION();
+ImGui::CreateContext();
+ImGuiIO& io = ImGui::GetIO(); 
+io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+ImGui::StyleColorsDark(); // Sau StyleColorsLight() dacă preferi
+
+ImGui_ImplGlfw_InitForOpenGL(window, true);
+ImGui_ImplOpenGL3_Init("#version 330");
+
 //* Set Viewport & Callbacks
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
@@ -1346,18 +1381,43 @@ int main(){
     std::srand(static_cast<unsigned int>(std::time(0)));
 
 
+    gameStartTime = (float)glfwGetTime();
 
     while (!glfwWindowShouldClose(window)) {
 
-
+   
 /************************************
 ** SECTION 11: FRAME LOGIC & CLEAR **
 ************************************/
 
+        // [1] START CADRU IMGUI
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        // [2] DEFINIRE UI UNITARĂ
+        ImGui::Begin("Mission Control"); 
+        ImGui::Text("FPS: %.1f", io.Framerate);
+        ImGui::Text("Score: %d", gameScore);
+        ImGui::Text("Survival Time: %.1fs", survivalTime);
+
+        if (isGameOver) {
+            // Dacă e Game Over, afișăm mouse-ul
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(1, 0, 0, 1), "MISSION FAILED!");
+            if (ImGui::Button("RESTART MISSION", ImVec2(150, 40))) {
+                resetGame();
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            }
+        }
+        ImGui::End();
     //* Delta Time    
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
+
+        survivalTime = (float)glfwGetTime() - gameStartTime;
 
         mercuryPos = calculateOrbit(sunPos, mercuryOrbitRadius, mercuryOrbitSpeed, currentFrame);
         venusPos = calculateOrbit(sunPos, venusOrbitRadius, venusOrbitSpeed, currentFrame);
@@ -1370,7 +1430,7 @@ int main(){
         neptunePos = calculateOrbit(sunPos, neptuneOrbitRadius, neptuneOrbitSpeed, currentFrame);
 
 
-        if (!isGameOver) {
+       if (!isGameOver) {
         
         // --- SPAWN ASTEROIDS ---
         if (currentFrame - lastSpawnTime > 2.0f) {
@@ -1378,35 +1438,47 @@ int main(){
             lastSpawnTime = currentFrame;
         }
 
-        // --- UPDATE ASTEROIDS (Mişcare şi Coliziune Pământ) ---
-        for (auto &ast : asteroids) {
+// --- UPDATE ASTEROIDS (Mişcare şi Coliziuni Multiple) ---
+for (auto &ast : asteroids) {
     if (!ast.isActive) continue; 
 
-    // [1] HOMING: Constantly re-aim at Earth's current orbital position
+    // [1] LOGICA DE MIȘCARE (Homing)
     glm::vec3 currentDir = glm::normalize(earthPos - ast.position);
     float currentSpeed = glm::length(ast.velocity); 
-    
-    // Safety check: ensure speed isn't zero
     if (currentSpeed < minAsteroidSpeed) currentSpeed = minAsteroidSpeed;
-    
     ast.velocity = currentDir * currentSpeed;
     ast.position += ast.velocity * deltaTime;
 
-    // [2] COLLISION DETECTION (Earth)
+    // [2] COLIZIUNE CU PĂMÂNTUL (Sfârșitul Lumii)
     float distToEarth = glm::distance(earthPos, ast.position);
-    float collisionThreshold = (earthScale * 0.5f) + (ast.scale * 0.5f);
-    
-    if (distToEarth < collisionThreshold) {
-        std::cout << "GAME OVER! Earth has been hit." << std::endl;
+    if (distToEarth < (earthScale * 0.5f) + (ast.scale * 0.5f)) {
+        earthIsHit = true; // Declanșăm efectul de Flash Alb
         isGameOver = true;
     }
 
-    // [3] CLEANUP: Remove if it somehow flies past the universe boundaries
+    // [3] COLIZIUNE CU NAVA / CAMERA (Explozie la impact)
+    float distToShip = glm::distance(cameraPos, ast.position);
+    if (distToShip < (ast.scale + 10.0f)) { // 10.0f este raza aproximativă a navei tale
+        
+        // Creăm explozia exact ca la laser
+        Explosion exp;
+        exp.position = ast.position;
+        exp.size = 1.0f;               
+        exp.maxSize = ast.scale * 4.0f; 
+        exp.alpha = 1.0f;
+        exp.lifeTime = 0.4f;
+        activeExplosions.push_back(exp);
+
+        ast.isActive = false; // Asteroidul dispare
+        gameScore -= 100.0f;  // Penalizare la scor (sau poți pune isGameOver = true aici)
+        std::cout << "Hull Breach! Asteroid destroyed by impact." << std::endl;
+    }
+
+    // [4] CURĂȚARE (Dacă trece de limitele universului)
     if (glm::distance(sunPos, ast.position) > universeScale * 2.0f) {
         ast.isActive = false;
     }
 }
-
 // [4] ERASE-REMOVE: Physically delete inactive asteroids from the vector
 asteroids.erase(std::remove_if(asteroids.begin(), asteroids.end(),
     [](const Asteroid& a) { return !a.isActive; }), asteroids.end());
@@ -1429,6 +1501,15 @@ asteroids.erase(std::remove_if(asteroids.begin(), asteroids.end(),
 
                 float dist = glm::distance(activeLasers[i].position, ast.position);
                 if (dist < (ast.scale * 2.5f)) {
+                    destroyedAsteroids++;
+                    float distDePamant = glm::distance(ast.position, earthPos);
+    float distNormalized = distDePamant / spawnDistance; 
+    if (distNormalized > 1.0f) distNormalized = 1.0f;
+
+    // Formula: Bonusul este mai mare dacă distNormalized este mare (departe de Pământ)
+    // Puncte de bază (ex: 100) + Bonus distanță (ex: 200 * factor)
+    float asteroidBonus = 100.0f + (200.0f * distNormalized);
+    gameScore += asteroidBonus;
                     ast.isActive = false;           // Distrugem asteroidul
                     activeLasers[i].lifeTime = 0;   // Distrugem laserul la impact
 
@@ -1483,6 +1564,34 @@ asteroids.erase(std::remove_if(asteroids.begin(), asteroids.end(),
         mouseYOffset = glm::mix(mouseYOffset, 0.0f, deltaTime * 2.0f);
         
         processInput(window);
+
+        // --- LOGICĂ DE COLIZIUNE CU PLANETELE ---
+        std::vector<PlanetCollision> solidObjects = {
+    {sunPos, sunScale},
+    {mercuryPos, mercuryScale},
+    {venusPos, venusScale},
+    {earthPos, earthScale},
+    {marsPos, marsScale},
+    {jupiterPos, jupiterScale},
+    {saturnPos, saturnScale},
+    {uranusPos, uranusScale},
+    {neptunePos, neptuneScale}
+};
+for (const auto& planet : solidObjects) {
+    float distance = glm::distance(cameraPos, planet.position);
+    float minDistance = planet.radius + 15.0f; // Raza planetei + o mică marjă de siguranță
+
+    if (distance < minDistance) {
+        // Calculăm direcția de la centrul planetei către navă
+        glm::vec3 collisionNormal = glm::normalize(cameraPos - planet.position);
+        
+        // Repoziționăm nava exact la marginea sferei (Push-out)
+        cameraPos = planet.position + collisionNormal * minDistance;
+        
+        
+    }
+}
+    
 
     //* Clear Buffers
         glClearColor(0.05f, 0.05f, 0.1f, 1.0f);
@@ -1540,6 +1649,35 @@ asteroids.erase(std::remove_if(asteroids.begin(), asteroids.end(),
 /**********************************************
 ** SECTION 14: BUFFER SWAP AND EVENT POLLING **
 **********************************************/
+
+// --- EFECT FLASH LA IMPACT ---
+if (earthIsHit) {
+    flashAlpha += deltaTime * flashSpeed;
+
+    // Activăm blending pentru a desena un dreptunghi alb peste tot ecranul
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST); // Să fie peste tot ce am desenat
+
+    // Folosim un Shader simplu sau direct ImGui pentru a umple ecranul cu alb
+    // Cea mai simplă metodă fără a crea noi obiecte GPU este ImGui:
+    ImGui::GetForegroundDrawList()->AddRectFilled(
+        ImVec2(0, 0), 
+        ImVec2((float)currentWidth, (float)currentHeight), 
+        ImColor(1.0f, 1.0f, 1.0f, flashAlpha)
+    );
+
+    // Când albul a acoperit tot ecranul (alfa >= 1.0)
+    if (flashAlpha >= 1.0f) {
+        glfwSetWindowShouldClose(window, true); // Închidem fereastra
+    }
+}
+
+// --- [FINAL CADRU IMGUI] ---
+    // Fără aceste 2 linii la FINALUL buclei (înainte de swap), crapă
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
@@ -1547,6 +1685,21 @@ asteroids.erase(std::remove_if(asteroids.begin(), asteroids.end(),
 /************************
 ** SECTION 0: CLEAN UP **
 ************************/
+    // Calculăm scorul final înainte de shutdown
+    float timePoints = survivalTime * 10.0f;
+    int finalScore = static_cast<int>(gameScore + timePoints);
+
+    std::cout << "\n===============================" << std::endl;
+    std::cout << "       MISSION TERMINATED!     " << std::endl;
+    std::cout << "===============================" << std::endl;
+    std::cout << "Final Score:       " << finalScore << " pts" << std::endl;
+    std::cout << "Survival:          " << (int)survivalTime << "s" << std::endl;
+    std::cout << "Targets destroyed: " << destroyedAsteroids << std::endl;
+    std::cout << "===============================\n" << std::endl;
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
     glfwTerminate();
     return 0;
 }
