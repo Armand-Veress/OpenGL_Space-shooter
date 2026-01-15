@@ -1,3 +1,4 @@
+
 /***********************************
 ** SECTION 1: LIBRARIES & IMPORTS **
 ***********************************/
@@ -31,173 +32,183 @@
 #include "imgui_impl_opengl3.h"
 #include "UI.h"
 
+
 /********************************
 ** SECTION 2: GLOBAL VARIABLES **
 ********************************/
 
-//* Display & Window Settings
-const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 600;
+// -->  CAMERA DEFINITION
+    glm::vec3 cameraPos   = glm::vec3(45000.0f, 500.0f, 0.0f);
+    glm::vec3 cameraLookAt = glm::vec3(0.0f, 0.0f, -1.0f);
+    glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 
-//* Camera Definition
-glm::vec3 cameraPos   = glm::vec3(45000.0f, 0.0f, 0.0f);
-glm::vec3 cameraLookAt = glm::vec3(0.0f, 0.0f, -1.0f);
-glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
+// -->  CAMERA MOVEMENT
+    float yaw   = 180.0f; 
+    float pitch =  0.0f;
+    float constantSpeed = 500.0f; 
 
-//* Camera Movement
-float yaw   = -90.0f; 
-float pitch =  0.0f;
-float constantSpeed = 100.0f; 
-float cameraSpeed = 500.0f;
+// -->  CURSOR CONTROL
+    bool firstMouse = true;
+    float lastX;
+    float lastY;
 
-//* Mouse Cursor Control
-bool firstMouse = true;
-float lastX =  SCR_WIDTH  / 2.0f;
-float lastY =  SCR_HEIGHT / 2.0f;
+// -->  TIMING & PHYSICS
+    float deltaTime = 0.0f; 
+    float lastFrame = 0.0f;
+    float globalOrbitSpeed = 0.1f;
 
-//* Timing & Physics
-float deltaTime = 0.0f; 
-float lastFrame = 0.0f;
-float globalOrbitSpeed = 0.1f;
+    // End of Earth flash
+    float flashAlpha = 0.0f;
+    float flashSpeed = 0.8f;
 
-//* GAMEPLAY GLOBALS  
-bool isGameOver = false;
-float lastSpawnTime = 0.0f;
+    // Spaceship Behaviour & Controls
+    float lerpFactor = 2.5f; 
+    float mouseSensitivity = 0.15f; 
+    float keyboardSensitivity = 60.0f;
+    float mouseXVel = 0.0f;
+    float mouseYVel = 0.0f;
+    float targetYawSpeed = 0.0f;
+    float targetPitchSpeed = 0.0f;
+    float currentYawSpeed = 0.0f;
+    float currentPitchSpeed = 0.0f;
+    float shipRoll = 0.0f;  
+    float shipPitch = 0.0f; 
+    float mouseXOffset = 0.0f;
+    float mouseYOffset = 0.0f;
 
-int destroyedAsteroids = 0;
-float gameStartTime = 0.0f;
-float survivalTime = 0.0f;
-float gameScore = 0.0f;
+    // Lasers Behaviour
+    float laserSpeed = 5000.0f;
+    float laserSize = 0.25f;
+    float lastShotTime = 0.0f;
 
-struct Asteroid {
-    glm::vec3 position;
-    glm::vec3 velocity;
-    glm::vec3 rotationAxis;
-    float rotationSpeed;
-    float scale;
-    bool isActive;
-};
-std::vector<Asteroid> asteroids; 
+    // Asteroids Behaviour
+    float spawnDistance = 8000.0f; 
+    float minAsteroidSpeed = 30.0f;
+    float maxAsteroidSpeed = 100.0f;
+    float minAsteroidSize = 10.0f;
+    float maxAsteroidSize = 75.0f;
 
-bool earthIsHit = false;
-float flashAlpha = 0.0f;
-float flashSpeed = 0.8f;
+    // Ship-Planet Collision
+    struct PlanetCollision {
+        glm::vec3 position;
+        float radius;
+    };
 
-//* Object data
-
-// Universe Constants
-glm::vec3 universeOrigin = glm::vec3(0.0f, 0.0f, 0.0f);
-
-glm::vec3 universePos = universeOrigin; 
-float universeScale = 5000.0f; 
-
-glm::vec3 sunPos = universeOrigin; 
-float sunScale = 1000.0f;
-
-glm::vec3 mercuryPos = glm::vec3(3000.0f, 0.0f, 0.0f);
-float mercuryScale = 38.0f; 
-float mercuryOrbitRadius = 3000.0f; 
-float mercuryOrbitSpeed = 0.83f*globalOrbitSpeed;
-
-glm::vec3 venusPos = glm::vec3(4000.0f, 0.0f, 0.0f);
-float venusScale = 95.0f; 
-float venusOrbitRadius = 4000.0f; 
-float venusOrbitSpeed = 0.32f*globalOrbitSpeed;
-
-glm::vec3 earthPos = glm::vec3(5000.0f, 0.0f, 0.0f);
-float earthScale = 100.0f; 
-float earthOrbitRadius = 5000.0f; 
-float earthOrbitSpeed = 0.1f*globalOrbitSpeed;
-
-glm::vec3 moonPos = glm::vec3(5250.0f, 0.0f, 0.0f);
-float moonScale = 20.0f; 
-float moonOrbitRadius = 370.0f; 
-float moonOrbitSpeed = 0.8f*globalOrbitSpeed;
-
-glm::vec3 marsPos = glm::vec3(6000.0f, 0.0f, 0.0f);
-float marsScale = 53.0f; 
-float marsOrbitRadius = 6000.0f; 
-float marsOrbitSpeed = 0.32f*globalOrbitSpeed;
-
-glm::vec3 jupiterPos = glm::vec3(9000.0f, 0.0f, 0.0f);
-float jupiterScale = 700.0f; 
-float jupiterOrbitRadius = 9000.0f; 
-float jupiterOrbitSpeed = 0.08f*globalOrbitSpeed;
-
-glm::vec3 saturnPos = glm::vec3(12000.0f, 0.0f, 0.0f);
-float saturnScale = 550.0f; 
-float saturnOrbitRadius = 12000.0f; 
-float saturnOrbitSpeed = 0.03f*globalOrbitSpeed;
-
-glm::vec3 uranusPos = glm::vec3(14000.0f, 0.0f, 0.0f);
-float uranusScale = 350.0f; 
-float uranusOrbitRadius = 14000.0f; 
-float uranusOrbitSpeed = 0.01f*globalOrbitSpeed;
-
-glm::vec3 neptunePos = glm::vec3(16000.0f, 0.0f, 0.0f);
-float neptuneScale = 300.0f; 
-float neptuneOrbitRadius = 16000.0f; 
-float neptuneOrbitSpeed = 0.006f*globalOrbitSpeed;
-
-// Ship 
-float shipScale = 2.0f;
-float shipLength = 5.0f;
-float shipWidth = 0.5f;
-float shipHeight = 0.1;
-
-float shipRoll = 0.0f;  // Z-axis
-float shipPitch = 0.0f; // X-axis
-float mouseXOffset = 0.0f;
-float mouseYOffset = 0.0f;
+// -->  GAMEPLAY GLOBALS  
+    bool isGameOver = false;
+    float gameStartTime = 0.0f;
+    float survivalTime = 0.0f;
+    int destroyedAsteroids = 0;
+    float gameScore = 0.0f;
+    float lastSpawnTime = 0.0f;
+    bool earthIsHit = false;
 
 
-// Ship control
-float targetYawSpeed = 0.0f;
-float targetPitchSpeed = 0.0f;
-float currentYawSpeed = 0.0f;
-float currentPitchSpeed = 0.0f;
+// -->  OBJECT DATA
 
-float lerpFactor = 5.0f; // Cu cât e mai mic, cu atât nava e mai "greoaie"
-float mouseSensitivity = 0.15f; 
-float keyboardSensitivity = 60.0f;
-float mouseXVel = 0.0f;
-float mouseYVel = 0.0f;
+    //* Universe
+    glm::vec3 universeOrigin = glm::vec3(0.0f, 0.0f, 0.0f);
 
-struct Explosion {
-    glm::vec3 position;
-    float size;
-    float alpha;
-    float lifeTime;
-    float maxSize;
-};
-std::vector<Explosion> activeExplosions;
+    //* Stars Background
+    glm::vec3 universePos = universeOrigin; 
+    float universeScale = 5000.0f; 
 
-struct LaserBeam {
-    glm::vec3 position;
-    glm::vec3 direction;
-    float speed;
-    float lifeTime;
-    std::vector<glm::vec3> trail;
-};
-std::vector<LaserBeam> activeLasers;
-float laserSpeed = 5000.0f;
-float laserSize = 0.25f;
-float lastShotTime = 0.0f;
+    //* Sun
+    glm::vec3 sunPos = universeOrigin; 
+    float sunScale = 1000.0f;
 
-struct PlanetCollision {
-    glm::vec3 position;
-    float radius;
-};
+    //* Mercury
+    glm::vec3 mercuryPos = glm::vec3(3000.0f, 0.0f, 0.0f);
+    float mercuryScale = 38.0f; 
+    float mercuryOrbitRadius = 3000.0f; 
+    float mercuryOrbitSpeed = 0.83f*globalOrbitSpeed;
 
+    //* Venus
+    glm::vec3 venusPos = glm::vec3(4000.0f, 0.0f, 0.0f);
+    float venusScale = 95.0f; 
+    float venusOrbitRadius = 4000.0f; 
+    float venusOrbitSpeed = 0.32f*globalOrbitSpeed;
 
-// Ateroids
-float spawnDistance = 8000.0f; 
-float minAsteroidSpeed = 30.0f;
-float maxAsteroidSpeed = 100.0f;
-float minAsteroidSize = 10.0f;
-float maxAsteroidSize = 75.0f;
+    //* Earth
+    glm::vec3 earthPos = glm::vec3(5000.0f, 0.0f, 0.0f);
+    float earthScale = 100.0f; 
+    float earthOrbitRadius = 5000.0f; 
+    float earthOrbitSpeed = 0.1f*globalOrbitSpeed;
 
-//* GPU Resource Handles - Render IDs
+    //* Moon
+    glm::vec3 moonPos = glm::vec3(5250.0f, 0.0f, 0.0f);
+    float moonScale = 20.0f; 
+    float moonOrbitRadius = 370.0f; 
+    float moonOrbitSpeed = 0.8f*globalOrbitSpeed;
+
+    //* Mars
+    glm::vec3 marsPos = glm::vec3(6000.0f, 0.0f, 0.0f);
+    float marsScale = 53.0f; 
+    float marsOrbitRadius = 6000.0f; 
+    float marsOrbitSpeed = 0.32f*globalOrbitSpeed;
+
+    //* Jupiter
+    glm::vec3 jupiterPos = glm::vec3(9000.0f, 0.0f, 0.0f);
+    float jupiterScale = 700.0f; 
+    float jupiterOrbitRadius = 9000.0f; 
+    float jupiterOrbitSpeed = 0.08f*globalOrbitSpeed;
+
+    //* Saturn
+    glm::vec3 saturnPos = glm::vec3(12000.0f, 0.0f, 0.0f);
+    float saturnScale = 550.0f; 
+    float saturnOrbitRadius = 12000.0f; 
+    float saturnOrbitSpeed = 0.03f*globalOrbitSpeed;
+
+    //* Uranus
+    glm::vec3 uranusPos = glm::vec3(14000.0f, 0.0f, 0.0f);
+    float uranusScale = 350.0f; 
+    float uranusOrbitRadius = 14000.0f; 
+    float uranusOrbitSpeed = 0.01f*globalOrbitSpeed;
+
+    //* Neptune
+    glm::vec3 neptunePos = glm::vec3(16000.0f, 0.0f, 0.0f);
+    float neptuneScale = 300.0f; 
+    float neptuneOrbitRadius = 16000.0f; 
+    float neptuneOrbitSpeed = 0.006f*globalOrbitSpeed;
+
+    //* Spaceship 
+    float shipScale = 2.0f;
+    float shipLength = 5.0f;
+    float shipWidth = 0.5f;
+    float shipHeight = 0.1;
+
+    //* Asteroids
+    struct Asteroid {
+        glm::vec3 position;
+        glm::vec3 velocity;
+        glm::vec3 rotationAxis;
+        float rotationSpeed;
+        float scale;
+        bool isActive;
+    };
+    std::vector<Asteroid> asteroids; 
+
+    //* Explosions
+    struct Explosion {
+        glm::vec3 position;
+        float size;
+        float alpha;
+        float lifeTime;
+        float maxSize;
+    };
+    std::vector<Explosion> activeExplosions;
+
+    //* Lasers
+    struct LaserBeam {
+        glm::vec3 position;
+        glm::vec3 direction;
+        float speed;
+        float lifeTime;
+        std::vector<glm::vec3> trail;
+    };
+    std::vector<LaserBeam> activeLasers;
+
+// -->  GPU Resource Handles - Render IDs
     
     // --- VAO & VBO ---
     unsigned int sphereVAO, sphereVBO, sphereEBO;
@@ -207,65 +218,36 @@ float maxAsteroidSize = 75.0f;
     unsigned int crosshairVAO, crosshairVBO; 
     unsigned int asteroidVAO, asteroidVBO;
     
-    // --- Universe Stars-Background ---
+    // --- TEXTURES ---
     unsigned int universeTexture;
-    
-    // --- Sun ---
     unsigned int sunTexture;
-
-    // --- Mercury ---
     unsigned int mercuryTexture;
-    unsigned int mercuryNormalMap;
-
-    // --- Venus ---
     unsigned int venusTexture;
-    unsigned int venusNormalMap;
-
-    // --- Earth ---
     unsigned int earthTexture;
-    unsigned int earthNormalMap;
-
-    // --- Moon ---
     unsigned int moonTexture;
-    unsigned int moonNormalMap;
-
-    // --- Mars ---
     unsigned int marsTexture;
-    unsigned int marsNormalMap;
-
-    // --- Jupiter ---
     unsigned int jupiterTexture;
-
-    // --- Saturn ---
     unsigned int saturnTexture;
     unsigned int saturnRingTexture;
-
-    // --- Uranus ---
     unsigned int uranusTexture;
-
-    // --- Neptun ---
     unsigned int neptuneTexture;
- 
-    // --- Defauld Flat Normal Map ---
-    unsigned int flatNormalMap;
-
-    // --- Spaceship ---
     unsigned int shipTexture;
-
-    // --- ASTEROID TEXTURE  ---
     unsigned int asteroidTexture;
-      
+ 
+    // --- NORMAL MAPS ---
+    unsigned int mercuryNormalMap;
+    unsigned int venusNormalMap;
+    unsigned int earthNormalMap;
+    unsigned int moonNormalMap;
+    unsigned int marsNormalMap;
+    unsigned int flatNormalMap; // default uniform Normal Map
+
 
 /************************************************
 ** SECTION 3: INTERACTIVITY & EVENT MANAGEMENT **
 ************************************************/
 
-//* Window Resize
-void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-    glViewport(0, 0, width, height);
-}
-
-// RESET GAME LOGIC 
+//* RESET GAME
 void resetGame() {
     asteroids.clear();
     activeLasers.clear();
@@ -276,87 +258,13 @@ void resetGame() {
     cameraPos = glm::vec3(4500.0f, 0.0f, 0.0f);
 }
 
-// SPAWN LOGIC
-void spawnAsteroid() {
-    Asteroid a;
-    bool validSpawn = false;
-    glm::vec3 spawnPos;
-    glm::vec3 dirToEarth;
-
-    // [ITERATION LOOP: ENSURE CLEAR PATH]
-    while (!validSpawn) {
-        // [SPHERE MAPPING: 3D COORDINATES]
-        float theta = ((float)rand() / RAND_MAX) * 2.0f * 3.14159f; 
-        float phi = acos(2.0f * ((float)rand() / RAND_MAX) - 1.0f); 
-
-        spawnPos.x = spawnDistance * sin(phi) * cos(theta);
-        spawnPos.y = spawnDistance * sin(phi) * sin(theta);
-        spawnPos.z = spawnDistance * cos(phi);
-
-        dirToEarth = glm::normalize(earthPos - spawnPos);
-        validSpawn = true;
-
-        // [OBSTACLE DEFINITIONS: PLANETS & SUN]
-        struct Obstacle { glm::vec3 pos; float radius; };
-        std::vector<Obstacle> planets = {
-            {sunPos, 850.0f},      
-            {mercuryPos, 200.0f},
-            {venusPos, 400.0f},
-            {marsPos, 400.0f},
-            {jupiterPos, 1100.0f}, 
-            {saturnPos, 950.0f}
-        };
-
-        // [TRAJECTORY CHECK: RAY-SPHERE INTERSECTION]
-        float distToEarth = glm::distance(spawnPos, earthPos);
-        for (auto& p : planets) {
-            glm::vec3 L = p.pos - spawnPos;
-            float t = glm::dot(L, dirToEarth);
-            
-            if (t > 0 && t < distToEarth) { 
-                glm::vec3 closestPoint = spawnPos + dirToEarth * t;
-                float d = glm::distance(p.pos, closestPoint);
-                
-                if (d < p.radius) { 
-                    validSpawn = false; 
-                    break;
-                }
-            }
-        }
-    }
-
-    // [SIZE INITIALIZATION]
-    a.scale = minAsteroidSize + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (maxAsteroidSize - minAsteroidSize)));
-
-    // [VELOCITY INITIALIZATION]
-    float speedMultiplier = 1.0f + (survivalTime * 0.005f); // Crește cu 0.5% pe secundă
-    float speed = (minAsteroidSpeed + static_cast<float>(rand() % (int)(maxAsteroidSpeed - minAsteroidSpeed))) * speedMultiplier;
-    a.position = spawnPos;
-    a.velocity = dirToEarth * speed;
-    a.isActive = true;
-
-    // [ROTATION LOGIC: TUMBLING TOWARD EARTH]
-    // Generate a side vector perpendicular to the movement direction
-    glm::vec3 upRef = (fabs(dirToEarth.y) < 0.9f) ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
-    glm::vec3 rollAxis = glm::normalize(glm::cross(dirToEarth, upRef));
-    
-    // Add a slight random wobble (10%) so it doesn't look like a perfect wheel
-    glm::vec3 wobble = glm::normalize(glm::vec3((rand()%10)/10.0f, (rand()%10)/10.0f, (rand()%10)/10.0f));
-    a.rotationAxis = glm::normalize(glm::mix(rollAxis, wobble, 0.1f));
-
-    // Rotation speed slightly affected by movement speed for realism
-    a.rotationSpeed = 0.5f + (speed / 400.0f) + (static_cast<float>(rand() % 100) / 50.0f);
-
-    asteroids.push_back(a);
-}
-
-//* Camera Keyboard Control -- Movement & Steering
+//* Keyboard Steering & Shooting
 void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
     // [MOVEMENT]
-    float currentSpeed = cameraSpeed;
+    float currentSpeed = constantSpeed;
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || 
         glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
         currentSpeed *= 4.0f;
@@ -367,7 +275,6 @@ void processInput(GLFWwindow *window) {
     targetPitchSpeed = 0.0f;
     targetYawSpeed = 0.0f;
 
-    // Add Keyboard input to targets
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) targetPitchSpeed = keyboardSensitivity;
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) targetPitchSpeed = -keyboardSensitivity;
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) targetYawSpeed = -keyboardSensitivity;
@@ -384,7 +291,7 @@ void processInput(GLFWwindow *window) {
     yaw   += currentYawSpeed * deltaTime;
     pitch += currentPitchSpeed * deltaTime;
 
-    // Reset mouse accumulation after applying
+    // Accumulation reset
     mouseXVel = 0.0f;
     mouseYVel = 0.0f;
 
@@ -402,7 +309,7 @@ void processInput(GLFWwindow *window) {
     mouseXOffset = currentYawSpeed * 0.05f;
     mouseYOffset = currentPitchSpeed * 0.05f;
 
-    // [LASER LOGIC - REMAINS SAME]
+    // [LASERS]
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS || 
         glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
         float currentTime = (float)glfwGetTime();
@@ -418,6 +325,8 @@ void processInput(GLFWwindow *window) {
     }
 }
 
+
+//* Cursor Steering
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
     float xpos = static_cast<float>(xposIn);
     float ypos = static_cast<float>(yposIn);
@@ -431,11 +340,33 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
     float yoffset = ypos - lastY;
     lastX = xpos; lastY = ypos;
 
-    // Accumulate the movement (multiplied by sensitivity)
-    // We don't divide by deltaTime here to avoid NaN spikes
     mouseXVel = xoffset * mouseSensitivity * 100.0f; 
     mouseYVel = -yoffset * mouseSensitivity * 100.0f;
 }
+
+
+//* SPAWN LOGIC
+void spawnAsteroid() {
+    Asteroid a;
+    float theta = ((float)rand() / RAND_MAX) * 2.0f * 3.14159f; 
+    float phi = acos(2.0f * ((float)rand() / RAND_MAX) - 1.0f); 
+
+    a.position.x = spawnDistance * sin(phi) * cos(theta);
+    a.position.y = spawnDistance * sin(phi) * sin(theta);
+    a.position.z = spawnDistance * cos(phi);
+
+    glm::vec3 dirToEarth = glm::normalize(earthPos - a.position);
+    a.scale = minAsteroidSize + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (maxAsteroidSize - minAsteroidSize)));
+    float speed = minAsteroidSpeed + static_cast<float>(rand() % (int)(maxAsteroidSpeed - minAsteroidSpeed));
+    
+    a.velocity = dirToEarth * speed;
+    a.isActive = true;
+    a.rotationAxis = glm::normalize(glm::vec3((rand()%100)/100.0f, (rand()%100)/100.0f, (rand()%100)/100.0f));
+    a.rotationSpeed = 0.5f + static_cast<float>(rand() % 100) / 50.0f;
+
+    asteroids.push_back(a);
+}
+
 
 /*********************************
 ** SECTION 4: UTILITY FUNCTIONS **
@@ -447,11 +378,6 @@ unsigned int loadTexture(char const * path, bool isAlpha) {
     glGenTextures(1, &textureID);
 
     int width, height, nrComponents;
-    
-    // Flip only for rings/transparent textures if needed
-    stbi_set_flip_vertically_on_load(isAlpha); 
-
-    // Force 4 channels if isAlpha is true, otherwise let stb detect
     unsigned char *data = stbi_load(path, &width, &height, &nrComponents, isAlpha ? 4 : 0);
     
     if (data) {
@@ -469,17 +395,12 @@ unsigned int loadTexture(char const * path, bool isAlpha) {
 
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
-
-        // RING SETTINGS: Clamp to edge prevents seams
-        // PLANET SETTINGS: Repeat for tiling
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, isAlpha ? GL_CLAMP_TO_EDGE : GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, isAlpha ? GL_CLAMP_TO_EDGE : GL_REPEAT);
         
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
         stbi_image_free(data);
-        std::cout << "SUCCESS: Loaded " << (isAlpha ? "ALPHA " : "") << "texture: " << path << std::endl;
+        std::cout << "SUCCESS: Loaded  texture: " << path << std::endl;
     } else {
         std::cout << "ERROR: Failed to load texture: " << path << std::endl;
         stbi_image_free(data);
@@ -523,10 +444,7 @@ void setupSphere() {
             float uTex = xSegment;
             float vTex = ySegment;
 
-            // Normal
             glm::vec3 normal(xPos, yPos, zPos);
-
-            // Tangent
             float tx = -std::sin(xSegment * 2.0f * PI);
             float ty = 0.0f;
             float tz = std::cos(xSegment * 2.0f * PI);
@@ -578,29 +496,29 @@ void setupSphere() {
     glEnableVertexAttribArray(3);  
 }
 
-//* Ship
+//* Spaceship
 void setupShip() {
     float halfW = shipWidth / 2.0f;
     float halfH = shipHeight / 2.0f;
 
     float shipVertices[] = {
         // X          Y               Z               U     V
-        // --- PANOU DREAPTA-SUS ---
+        // --- Top right side ---
          0.0f,       0.0f,           0.0f,           0.0f, 0.0f, 
          halfW,     -halfH,          0.0f,           1.0f, 0.0f, 
          0.0f,      -halfH,         -shipLength,     0.5f, 5.0f, 
 
-        // --- PANOU STÂNGA-SUS ---
+        // --- Top left side ---
          0.0f,       0.0f,           0.0f,           1.0f, 0.0f, 
         -halfW,     -halfH,          0.0f,           0.0f, 0.0f, 
          0.0f,      -halfH,         -shipLength,     0.5f, 5.0f, 
 
-        // --- PANOU DREAPTA-JOS ---
+        // --- Bottom right side ---
          0.0f,      -shipHeight,     0.0f,           0.0f, 0.0f, 
          halfW,     -halfH,          0.0f,           1.0f, 0.0f, 
          0.0f,      -halfH,         -shipLength,     0.5f, 5.0f, 
 
-        // --- PANOU STÂNGA-JOS ---
+        // --- Bottom left side ---
          0.0f,      -shipHeight,     0.0f,           1.0f, 0.0f, 
         -halfW,     -halfH,          0.0f,           0.0f, 0.0f, 
          0.0f,      -halfH,         -shipLength,     0.5f, 5.0f
@@ -657,7 +575,7 @@ void setupRing() {
     glEnableVertexAttribArray(3);
 }
 
-// Setup CROSSHAIR
+//* Setup CROSSHAIR
 void setupCrosshair() {
     float chVertices[] = {
         -0.03f, 0.0f, 0.0f,   0.03f, 0.0f, 0.0f, // Orizontal
@@ -711,9 +629,8 @@ void drawSun(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, sunTexture); 
-    shader.setInt("diffuseMap", 0); // Link the texture to the shader sampler
+    shader.setInt("diffuseMap", 0); 
 
-    // View & Projection Matrices
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
 
@@ -723,7 +640,6 @@ void drawSun(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     model = glm::scale(model, glm::vec3(sunScale));
     shader.setMat4("model", model);
 
-    //  Draw
     glBindVertexArray(sphereVAO); 
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
     glEnable(GL_CULL_FACE);
@@ -785,7 +701,7 @@ void drawVenus(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glEnable(GL_CULL_FACE);
 }
 
-//* Planet Earth
+//* Earth
 void drawEarth(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDisable(GL_CULL_FACE);
     shader.use();
@@ -942,7 +858,6 @@ void drawRing(Shader &shader, glm::mat4 projection, glm::mat4 view,
     shader.setBool("isSun", true);
     shader.setBool("isSaturnRing", true);
 
-    // UNIFORMS: MATRICES
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
     
@@ -1031,7 +946,7 @@ void drawNeptune(Shader &shader, glm::mat4 projection, glm::mat4 view) {
 }
 
 
-//* Ship
+//* Spaceship
 void drawShip(Shader &shader, glm::mat4 projection) {
     glDisable(GL_CULL_FACE);
     shader.use();
@@ -1064,10 +979,9 @@ void drawLaser(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     shader.setBool("isSun", true);
     shader.setBool("useColor", true);
 
-    // ACTIVĂM TRANSPARENȚA
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthMask(GL_FALSE); // Dezactivăm scrierea în Depth Buffer pentru a evita artefactele de trail
+    glDepthMask(GL_FALSE); 
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -1075,8 +989,8 @@ void drawLaser(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     for (const auto& laser : activeLasers) {
         if (glm::distance(laser.position, cameraPos) < 15.0f) continue;
 
-        // --- 1. MIEZUL BIILEI (Opacitate mare) ---
-        shader.setVec3("customColor", glm::vec3(1.0f, 0.5f, 1.0f)); // Mov spre alb în centru
+        // [LASER CORE SPHERE]
+        shader.setVec3("customColor", glm::vec3(1.0f, 0.5f, 1.0f)); 
         shader.setFloat("alpha", 1.0f); 
         
         glm::mat4 model = glm::mat4(1.0f);
@@ -1087,19 +1001,19 @@ void drawLaser(Shader &shader, glm::mat4 projection, glm::mat4 view) {
         glBindVertexArray(sphereVAO);
         glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
 
-        // --- 2. EFECTUL DE GLOW (Sferă mai mare și transparentă) ---
-        shader.setVec3("customColor", glm::vec3(0.5f, 0.0f, 0.5f)); // Mov închis la margini
-        shader.setFloat("alpha", 0.3f); // Foarte transparent
+        // [OUTER GLOW SPHERE]
+        shader.setVec3("customColor", glm::vec3(0.5f, 0.0f, 0.5f)); 
+        shader.setFloat("alpha", 0.3f);
         
         glm::mat4 glowModel = glm::mat4(1.0f);
         glowModel = glm::translate(glowModel, laser.position);
-        glowModel = glm::scale(glowModel, glm::vec3(pulse * 1.8f)); // Cu 80% mai mare decât miezul
+        glowModel = glm::scale(glowModel, glm::vec3(pulse * 1.8f));
         shader.setMat4("model", glowModel);
         glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
 
-        // --- 3. TRAIL-UL CU FADE (Opacitate descrescătoare) ---
+        // [FADED LASER TRAIL] 
         for (size_t j = 0; j < laser.trail.size(); j++) {
-            float trailAlpha = (float)j / laser.trail.size() * 0.4f; // Devine mai transparent spre coadă
+            float trailAlpha = (float)j / laser.trail.size() * 0.4f; 
             shader.setFloat("alpha", trailAlpha);
             
             glm::mat4 trailModel = glm::mat4(1.0f);
@@ -1112,7 +1026,6 @@ void drawLaser(Shader &shader, glm::mat4 projection, glm::mat4 view) {
         }
     }
 
-    // RESETARE STARE
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
     shader.setBool("isSun", false);
@@ -1121,7 +1034,7 @@ void drawLaser(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     shader.setBool("useColor", false);
 }
 
-// EXPLOSIONS
+//* Explosions
 void drawExplosions(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     if (activeExplosions.empty()) return;
 
@@ -1134,12 +1047,10 @@ void drawExplosions(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     glDepthMask(GL_FALSE);
 
     for (const auto& exp : activeExplosions) {
-        // Calculăm un factor de progres bazat pe mărimea actuală față de maxim
-        // (ne ajută să vedem evoluția creșterii)
         float growthFactor = exp.size / exp.maxSize;
 
-        // --- LAYER 1: Aura Exterioară (MOV) ---
-        // Crește de la 0.25 până la 1.0 (mărimea maximă a asteroidului/exploziei)
+        
+        // [OUTER EXPLOSION SPHERE]
         float auraStart = exp.maxSize * 0.25f;
         float auraCurrent = glm::mix(auraStart, exp.maxSize, growthFactor);
 
@@ -1154,8 +1065,7 @@ void drawExplosions(Shader &shader, glm::mat4 projection, glm::mat4 view) {
         glBindVertexArray(sphereVAO);
         glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
 
-        // --- LAYER 2: Nucleul Central (ALB) ---
-        // Crește de la 0.15 până la 0.4 din mărimea maximă
+        // [CORE EXPLOSION SPHERE]
         float coreStart = exp.maxSize * 0.15f;
         float coreEnd   = exp.maxSize * 0.40f;
         float coreCurrent = glm::mix(coreStart, coreEnd, growthFactor);
@@ -1177,10 +1087,10 @@ void drawExplosions(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     shader.setBool("useColor", false);
 }
 
-// Dynamic Asteroids
+//* Dynamic Asteroids
 void drawDynamicAsteroids(Shader &shader, glm::mat4 projection, glm::mat4 view) {
     shader.use();
-    shader.setBool("isSun", false); // Sa aiba umbre
+    shader.setBool("isSun", false); 
     shader.setBool("isRing", false);
 
     shader.setMat4("projection", projection);
@@ -1194,7 +1104,7 @@ void drawDynamicAsteroids(Shader &shader, glm::mat4 projection, glm::mat4 view) 
     glBindTexture(GL_TEXTURE_2D, flatNormalMap);
     shader.setInt("normalMap", 1);
 
-    glBindVertexArray(sphereVAO); // Folosim sferul pt aspect natural
+    glBindVertexArray(sphereVAO);
 
     for (const auto& ast : asteroids) {
         if (!ast.isActive) continue;
@@ -1245,10 +1155,9 @@ int main(){
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    //GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "CGRMR - OpenGL project", NULL, NULL);
     GLFWmonitor* primaryMonitor = glfwGetPrimaryMonitor(); 
     const GLFWvidmode* mode = glfwGetVideoMode(primaryMonitor); 
-    GLFWwindow* window = glfwCreateWindow(mode->width, mode->height, "CGRMR - Death Star Defender", primaryMonitor, NULL); 
+    GLFWwindow* window = glfwCreateWindow(mode->width, mode->height, "CGRMR - OpenGL project", primaryMonitor, NULL); 
 
     if (window == NULL) {
         std::cout << "Failed to create GLFW window" << std::endl;
@@ -1263,114 +1172,65 @@ int main(){
         return -1;
     }
 
-// --- [IMGUI INITIALIZATION] ---
-IMGUI_CHECKVERSION();
-ImGui::CreateContext();
-ImGuiIO& io = ImGui::GetIO(); 
-io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
-ImGui::StyleColorsDark(); // Sau StyleColorsLight() dacă preferi
+//* Initialize IMGUI
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); 
+    io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+    ImGui::StyleColorsDark(); 
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330");
 
-ImGui_ImplGlfw_InitForOpenGL(window, true);
-ImGui_ImplOpenGL3_Init("#version 330");
-
-//* Set Viewport & Callbacks
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-
+//* Set Viewport & Configurations
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
-
-    // Screenmapping (NDC -> 2D Screen Space)
     glViewport(0, 0, width, height);
 
-//* Input Configurations
-
-    // Hide Cursor
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-    // Set Mouse Callback
     glfwSetCursorPosCallback(window, mouse_callback);
 
-/*********************************************
-** SECTION 8: GLOBAL OPENGL CONFIGURATIONS  **
-*********************************************/
-
-    // Depth Testing
     glEnable(GL_DEPTH_TEST);
 
-    // Culling
 
+/***********************************************
+** SECTION 8: ASSETS LOADING & GEOMETRY SETUP **
+***********************************************/
 
-/*********************************************
-** SECTION 9: GLOBAL OPENGL CONFIGURATIONS  **
-*********************************************/
-
-    // Geometric Shapes Models
+//* Setup Geometry Models
     setupSphere();
     setupRing();
-
-    // Spaceship's nose model
     setupShip();
-
     setupCrosshair();
 
-
-/****************************************************
-** SECTION 10: ASSETS LOADING (SHADERS & TEXTURES) **
-****************************************************/
-
 //* Load Shaders
-
     Shader mainShader("shaders/vertex.glsl", "shaders/fragment.glsl");
     mainShader.use();
     glUniform1i(glGetUniformLocation(mainShader.ID, "texture_diffuse1"), 0);
 
 //* Load Textures
-    // Universe Stars-Background texture
     universeTexture = loadTexture("textures/8k_stars_milky_way.jpg", false);
-
-    // Sun's texture
     sunTexture = loadTexture("textures/8k_sun.jpg", false);
-
-    // Mercury's texture
     mercuryTexture = loadTexture("textures/8k_mercury.jpg", false);
-    mercuryNormalMap = loadTexture("textures/mercury_normal.png", false);
-
-    // Venus's texture
     venusTexture = loadTexture("textures/8k_venus_surface.jpg", false);
-    venusNormalMap = loadTexture("textures/venus_normal.png", false);
-
-    // Earth's texture
     earthTexture = loadTexture("textures/8k_earth_daymap.jpg", false);
-    earthNormalMap = loadTexture("textures/earth_normal.png", false);
-
-    // Moon's texture
     moonTexture = loadTexture("textures/8k_moon.jpg", false);
-    moonNormalMap = loadTexture("textures/moon_normal.png", false);
-    
-    // Mars's texture
     marsTexture = loadTexture("textures/8k_mars.jpg", false);
-    marsNormalMap = loadTexture("textures/mars_normal.png", false);
-
-    // Jupiter's texture
     jupiterTexture = loadTexture("textures/8k_jupiter.jpg", false);
-
-    // Saturns's texture
     saturnTexture = loadTexture("textures/8k_saturn.jpg", false);
     saturnRingTexture = loadTexture("textures/8k_saturn_ring.png", true);
-
-    // Uranus's texture
     uranusTexture = loadTexture("textures/2k_uranus.jpg", false);
-
-    // Neptune's texture
     neptuneTexture = loadTexture("textures/2k_neptune.jpg", false);
-
-    // Spaceship's texture
     shipTexture = loadTexture("textures/spaceship.jpg", false);
-
-    // Asteroid texture
     asteroidTexture = loadTexture("textures/4k_makemake.jpg", false);
+
+//* Load Normal Maps
+    mercuryNormalMap = loadTexture("textures/mercury_normal.png", false);
+    venusNormalMap = loadTexture("textures/venus_normal.png", false);
+    earthNormalMap = loadTexture("textures/earth_normal.png", false);
+    moonNormalMap = loadTexture("textures/moon_normal.png", false);
+    marsNormalMap = loadTexture("textures/mars_normal.png", false);
     
-    // Generate Default Flat Normal Map
+    // Generate Default Uniform NormalMap
     glGenTextures(1, &flatNormalMap);
     glBindTexture(GL_TEXTURE_2D, flatNormalMap);
     unsigned char pixel[] = { 128, 128, 255, 255 }; 
@@ -1379,46 +1239,33 @@ ImGui_ImplOpenGL3_Init("#version 330");
 
     // Init Random seed
     std::srand(static_cast<unsigned int>(std::time(0)));
-
-
     gameStartTime = (float)glfwGetTime();
 
-    while (!glfwWindowShouldClose(window)) {
-
-   
+       
 /************************************
 ** SECTION 11: FRAME LOGIC & CLEAR **
 ************************************/
+    while (!glfwWindowShouldClose(window)) {
 
-        // [1] START CADRU IMGUI
+        // START IMGUI FRAME
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // [2] DEFINIRE UI UNITARĂ
+        // UI Box Definition
         ImGui::Begin("Mission Control"); 
         ImGui::Text("FPS: %.1f", io.Framerate);
         ImGui::Text("Score: %d", gameScore);
         ImGui::Text("Survival Time: %.1fs", survivalTime);
-
-        if (isGameOver) {
-            // Dacă e Game Over, afișăm mouse-ul
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(1, 0, 0, 1), "MISSION FAILED!");
-            if (ImGui::Button("RESTART MISSION", ImVec2(150, 40))) {
-                resetGame();
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-            }
-        }
         ImGui::End();
+
     //* Delta Time    
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
-
         survivalTime = (float)glfwGetTime() - gameStartTime;
 
+    //* Updated Planet Positions
         mercuryPos = calculateOrbit(sunPos, mercuryOrbitRadius, mercuryOrbitSpeed, currentFrame);
         venusPos = calculateOrbit(sunPos, venusOrbitRadius, venusOrbitSpeed, currentFrame);
         earthPos = calculateOrbit(sunPos, earthOrbitRadius, earthOrbitSpeed, currentFrame);
@@ -1429,255 +1276,214 @@ ImGui_ImplOpenGL3_Init("#version 330");
         uranusPos = calculateOrbit(sunPos, uranusOrbitRadius, uranusOrbitSpeed, currentFrame);
         neptunePos = calculateOrbit(sunPos, neptuneOrbitRadius, neptuneOrbitSpeed, currentFrame);
 
+    //* Gameplay
+        if (!isGameOver) {
 
-       if (!isGameOver) {
-        
-        // --- SPAWN ASTEROIDS ---
-        if (currentFrame - lastSpawnTime > 2.0f) {
-            spawnAsteroid();
-            lastSpawnTime = currentFrame;
-        }
-
-// --- UPDATE ASTEROIDS (Mişcare şi Coliziuni Multiple) ---
-for (auto &ast : asteroids) {
-    if (!ast.isActive) continue; 
-
-    // [1] LOGICA DE MIȘCARE (Homing)
-    glm::vec3 currentDir = glm::normalize(earthPos - ast.position);
-    float currentSpeed = glm::length(ast.velocity); 
-    if (currentSpeed < minAsteroidSpeed) currentSpeed = minAsteroidSpeed;
-    ast.velocity = currentDir * currentSpeed;
-    ast.position += ast.velocity * deltaTime;
-
-    // [2] COLIZIUNE CU PĂMÂNTUL (Sfârșitul Lumii)
-    float distToEarth = glm::distance(earthPos, ast.position);
-    if (distToEarth < (earthScale * 0.5f) + (ast.scale * 0.5f)) {
-        earthIsHit = true; // Declanșăm efectul de Flash Alb
-        isGameOver = true;
-    }
-
-    // [3] COLIZIUNE CU NAVA / CAMERA (Explozie la impact)
-    float distToShip = glm::distance(cameraPos, ast.position);
-    if (distToShip < (ast.scale + 10.0f)) { // 10.0f este raza aproximativă a navei tale
-        
-        // Creăm explozia exact ca la laser
-        Explosion exp;
-        exp.position = ast.position;
-        exp.size = 1.0f;               
-        exp.maxSize = ast.scale * 4.0f; 
-        exp.alpha = 1.0f;
-        exp.lifeTime = 0.4f;
-        activeExplosions.push_back(exp);
-
-        ast.isActive = false; // Asteroidul dispare
-        gameScore -= 100.0f;  // Penalizare la scor (sau poți pune isGameOver = true aici)
-        std::cout << "Hull Breach! Asteroid destroyed by impact." << std::endl;
-    }
-
-    // [4] CURĂȚARE (Dacă trece de limitele universului)
-    if (glm::distance(sunPos, ast.position) > universeScale * 2.0f) {
-        ast.isActive = false;
-    }
-}
-// [4] ERASE-REMOVE: Physically delete inactive asteroids from the vector
-asteroids.erase(std::remove_if(asteroids.begin(), asteroids.end(),
-    [](const Asteroid& a) { return !a.isActive; }), asteroids.end());
-
-        // --- UPDATE LASERS & COLLISION DETECTION (Sistemul de Blitz integrat) ---
-        for (int i = 0; i < activeLasers.size(); i++) {
-            // Actualizare Trail (Dâra de lumină)
-            activeLasers[i].trail.push_back(activeLasers[i].position);
-            if (activeLasers[i].trail.size() > 15) { 
-                activeLasers[i].trail.erase(activeLasers[i].trail.begin());
+        //* Spawn Asteroids
+            if (currentFrame - lastSpawnTime > 2.0f) {
+                spawnAsteroid();
+                lastSpawnTime = currentFrame;
             }
 
-            // Mișcare Laser
-            activeLasers[i].position += activeLasers[i].direction * activeLasers[i].speed * deltaTime;
-            activeLasers[i].lifeTime -= deltaTime;
-
-            // Verificare Coliziune Laser vs Asteroizi
+        //* Update Asteroids 
             for (auto &ast : asteroids) {
-                if (!ast.isActive) continue;
+                if (!ast.isActive) continue; 
 
-                float dist = glm::distance(activeLasers[i].position, ast.position);
-                if (dist < (ast.scale * 2.5f)) {
-                    destroyedAsteroids++;
-                    float distDePamant = glm::distance(ast.position, earthPos);
-    float distNormalized = distDePamant / spawnDistance; 
-    if (distNormalized > 1.0f) distNormalized = 1.0f;
+            // Asteroids trajectories
+                glm::vec3 currentDir = glm::normalize(earthPos - ast.position);
+                float currentSpeed = glm::length(ast.velocity); 
+                if (currentSpeed < minAsteroidSpeed) currentSpeed = minAsteroidSpeed;
+                ast.velocity = currentDir * currentSpeed;
+                ast.position += ast.velocity * deltaTime;
 
-    // Formula: Bonusul este mai mare dacă distNormalized este mare (departe de Pământ)
-    // Puncte de bază (ex: 100) + Bonus distanță (ex: 200 * factor)
-    float asteroidBonus = 100.0f + (200.0f * distNormalized);
-    gameScore += asteroidBonus;
-                    ast.isActive = false;           // Distrugem asteroidul
-                    activeLasers[i].lifeTime = 0;   // Distrugem laserul la impact
+            // Check Earth collision -> Endgame effect
+                float distToEarth = glm::distance(earthPos, ast.position);
+                if (distToEarth < (earthScale * 0.5f) + (ast.scale * 0.5f)) {
+                    earthIsHit = true; 
+                    isGameOver = true;
+                }
 
-                    // --- CREARE EFECT IMPACT (BLITZ) ---
+            // Destroying Asteroids on collision with spaceship 
+                float distToShip = glm::distance(cameraPos, ast.position);
+                if (distToShip < (ast.scale + 10.0f)) { 
                     Explosion exp;
                     exp.position = ast.position;
                     exp.size = 1.0f;               
-                    exp.maxSize = ast.scale * 5.0f; 
+                    exp.maxSize = ast.scale * 4.0f; 
                     exp.alpha = 1.0f;
                     exp.lifeTime = 0.4f;
                     activeExplosions.push_back(exp);
+                    ast.isActive = false; 
+                }   
+            
+            }
+        
+        //* Clean Up inactive asteroids
+            asteroids.erase(std::remove_if(asteroids.begin(), asteroids.end(), [](const Asteroid& a) { 
+                return !a.isActive; 
+            }), asteroids.end());
 
-                    std::cout << "BOOM! Target Neutralized." << std::endl;
-                    break; // Ieșim din bucla de asteroizi pentru acest laser
+        //* Update Lasers & Check Target Hits
+            for (int i = 0; i < activeLasers.size(); i++) {
+                activeLasers[i].trail.push_back(activeLasers[i].position);
+                if (activeLasers[i].trail.size() > 15) { 
+                    activeLasers[i].trail.erase(activeLasers[i].trail.begin());
+                }
+
+                activeLasers[i].position += activeLasers[i].direction * activeLasers[i].speed * deltaTime;
+                activeLasers[i].lifeTime -= deltaTime;
+
+                for (auto &ast : asteroids) {
+                    if (!ast.isActive) continue;
+
+                    float dist = glm::distance(activeLasers[i].position, ast.position);
+                    if (dist < (ast.scale * 2.5f)) {
+                        destroyedAsteroids++;
+                        float distDePamant = glm::distance(ast.position, earthPos);
+                        float distNormalized = distDePamant / spawnDistance; 
+                        if (distNormalized > 1.0f) distNormalized = 1.0f;
+                        float proximityBonus = 1.0f - distNormalized;
+                        float asteroidBonus = 100.0f + (200.0f * proximityBonus);
+                        gameScore += asteroidBonus;
+                        ast.isActive = false;           
+                        activeLasers[i].lifeTime = 0;   
+
+                        Explosion exp;
+                        exp.position = ast.position;
+                        exp.size = 1.0f;               
+                        exp.maxSize = ast.scale * 5.0f; 
+                        exp.alpha = 1.0f;
+                        exp.lifeTime = 0.4f;
+                        activeExplosions.push_back(exp);
+                        break; 
+                    }
+                }
+
+                if (activeLasers[i].lifeTime <= 0) {
+                    activeLasers.erase(activeLasers.begin() + i);
+                    i--;
                 }
             }
 
-            // Ștergere laser expirat
-            if (activeLasers[i].lifeTime <= 0) {
-                activeLasers.erase(activeLasers.begin() + i);
-                i--;
+            for (int i = 0; i < activeExplosions.size(); i++) {
+                if (activeExplosions[i].size < activeExplosions[i].maxSize) {
+                    float diff = activeExplosions[i].maxSize - activeExplosions[i].size;
+                    activeExplosions[i].size += diff * 15.0f * deltaTime; 
+                }
+    
+                activeExplosions[i].alpha -= 2.0f * deltaTime;
+                activeExplosions[i].lifeTime -= deltaTime;
+    
+                if (activeExplosions[i].lifeTime <= 0 || activeExplosions[i].alpha <= 0) {
+                    activeExplosions.erase(activeExplosions.begin() + i);
+                    i--;
+                }
             }
         }
 
-        // --- CLEANUP ASTEROIDS (Erase-Remove idiom) ---
-        asteroids.erase(std::remove_if(asteroids.begin(), asteroids.end(),
-            [](const Asteroid& a) { return !a.isActive; }), asteroids.end());
-    }
-
-    for (int i = 0; i < activeExplosions.size(); i++) {
-    // Expansiune lină către maxSize
-    if (activeExplosions[i].size < activeExplosions[i].maxSize) {
-        // Se apropie de maxSize cu o viteză care scade pe măsură ce ajunge la țintă
-        float diff = activeExplosions[i].maxSize - activeExplosions[i].size;
-        activeExplosions[i].size += diff * 15.0f * deltaTime; 
-    }
-
-    activeExplosions[i].alpha -= 2.0f * deltaTime;
-    activeExplosions[i].lifeTime -= deltaTime;
-
-    if (activeExplosions[i].lifeTime <= 0 || activeExplosions[i].alpha <= 0) {
-        activeExplosions.erase(activeExplosions.begin() + i);
-        i--;
-    }
-}
     //* Process Input
+
         shipRoll = glm::mix(shipRoll, -mouseXOffset * 5.0f, deltaTime * 3.0f);
         shipPitch = glm::mix(shipPitch, mouseYOffset * 5.0f, deltaTime * 3.0f);
-
-    // Decay: Face nava să revină la centru când nu mai miști mouse-ul/tastele
         mouseXOffset = glm::mix(mouseXOffset, 0.0f, deltaTime * 2.0f);
         mouseYOffset = glm::mix(mouseYOffset, 0.0f, deltaTime * 2.0f);
         
         processInput(window);
 
-        // --- LOGICĂ DE COLIZIUNE CU PLANETELE ---
+        // Check Ship-Planets Collisions
         std::vector<PlanetCollision> solidObjects = {
-    {sunPos, sunScale},
-    {mercuryPos, mercuryScale},
-    {venusPos, venusScale},
-    {earthPos, earthScale},
-    {marsPos, marsScale},
-    {jupiterPos, jupiterScale},
-    {saturnPos, saturnScale},
-    {uranusPos, uranusScale},
-    {neptunePos, neptuneScale}
-};
-for (const auto& planet : solidObjects) {
-    float distance = glm::distance(cameraPos, planet.position);
-    float minDistance = planet.radius + 15.0f; // Raza planetei + o mică marjă de siguranță
+            {sunPos, sunScale},
+            {mercuryPos, mercuryScale},
+            {venusPos, venusScale},
+            {earthPos, earthScale},
+            {marsPos, marsScale},
+            {jupiterPos, jupiterScale},
+            {saturnPos, saturnScale},
+            {uranusPos, uranusScale},
+            {neptunePos, neptuneScale}
+        };  
 
-    if (distance < minDistance) {
-        // Calculăm direcția de la centrul planetei către navă
-        glm::vec3 collisionNormal = glm::normalize(cameraPos - planet.position);
-        
-        // Repoziționăm nava exact la marginea sferei (Push-out)
-        cameraPos = planet.position + collisionNormal * minDistance;
-        
-        
-    }
-}
+        for (const auto& planet : solidObjects) {
+            float distance = glm::distance(cameraPos, planet.position);
+            float minDistance = planet.radius + 15.0f; 
+
+            if (distance < minDistance) {
+                glm::vec3 collisionNormal = glm::normalize(cameraPos - planet.position);
+                cameraPos = planet.position + collisionNormal * minDistance;
+            }
+        }
     
 
     //* Clear Buffers
         glClearColor(0.05f, 0.05f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-
-/***********************************************
-** SECTION 12: CAMERA AND PROJECTION MATRICES **
-***********************************************/
-
     //* Window's Aspect Ratio
         int currentWidth, currentHeight;
         glfwGetFramebufferSize(window, &currentWidth, &currentHeight);
         float aspect = (float)currentWidth / (float)currentHeight;
 
-    //* Projection Matrix
+    //* Projection & View Matrices
         glm::mat4 projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10000.0f);
-        
-    //* View Matrix
         glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraLookAt, cameraUp);
 
 
 /********************************
 ** SECTION 13: SCENE RENDERING **
 ********************************/
-    float farLimit = 100000.0f; 
-    glm::mat4 farProjection = glm::perspective(glm::radians(45.0f), aspect, 10.0f, farLimit);
+        float farLimit = 100000.0f; 
+        glm::mat4 farProjection = glm::perspective(glm::radians(45.0f), aspect, 10.0f, farLimit);
 
-    mainShader.use();
-    mainShader.setBool("isRing", false); 
-    mainShader.setVec3("sunPos", sunPos);
-    mainShader.setVec3("viewPos", cameraPos);
+        mainShader.use();
+        mainShader.setBool("isRing", false); 
+        mainShader.setVec3("sunPos", sunPos);
+        mainShader.setVec3("viewPos", cameraPos);
 
-    drawUniverse(mainShader, farProjection, view);
-    drawMercury(mainShader, farProjection, view);
-    drawVenus(mainShader, farProjection, view);
-    drawSun(mainShader, farProjection, view);
-    drawEarth(mainShader, farProjection, view);
-    drawMoon(mainShader, farProjection, view);
-    drawMars(mainShader, farProjection, view);
-    drawJupiter(mainShader, farProjection, view);
-    drawSaturn(mainShader, farProjection, view);
-    drawRing(mainShader, farProjection, view, saturnPos, saturnScale, saturnRingTexture);
-    drawUranus(mainShader, farProjection, view);
-    drawNeptune(mainShader, farProjection, view);
+        drawUniverse(mainShader, farProjection, view);
+        drawMercury(mainShader, farProjection, view);
+        drawVenus(mainShader, farProjection, view);
+        drawSun(mainShader, farProjection, view);
+        drawEarth(mainShader, farProjection, view);
+        drawMoon(mainShader, farProjection, view);
+        drawMars(mainShader, farProjection, view);
+        drawJupiter(mainShader, farProjection, view);
+        drawSaturn(mainShader, farProjection, view);
+        drawRing(mainShader, farProjection, view, saturnPos, saturnScale, saturnRingTexture);
+        drawUranus(mainShader, farProjection, view);
+        drawNeptune(mainShader, farProjection, view);
 
-    drawDynamicAsteroids(mainShader, projection, view);
-    drawLaser(mainShader, projection, view);
-    drawExplosions(mainShader, projection, view);
+        drawDynamicAsteroids(mainShader, projection, view);
+        drawLaser(mainShader, projection, view);
+        drawExplosions(mainShader, projection, view);
 
-    glClear(GL_DEPTH_BUFFER_BIT);
-    drawShip(mainShader, projection);
-    drawCrosshair(mainShader);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        drawShip(mainShader, projection);
+        drawCrosshair(mainShader);
 
-/**********************************************
-** SECTION 14: BUFFER SWAP AND EVENT POLLING **
-**********************************************/
 
-// --- EFECT FLASH LA IMPACT ---
-if (earthIsHit) {
-    flashAlpha += deltaTime * flashSpeed;
+        if (earthIsHit) {
+            flashAlpha += deltaTime * flashSpeed;
+    
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glDisable(GL_DEPTH_TEST); 
+    
+            ImGui::GetForegroundDrawList()->AddRectFilled(
+                ImVec2(0, 0), 
+                ImVec2((float)currentWidth, (float)currentHeight), 
+                ImColor(1.0f, 1.0f, 1.0f, flashAlpha)
+            );
+    
+            if (flashAlpha >= 1.0f) {
+                glfwSetWindowShouldClose(window, true); 
+            }
+        }
 
-    // Activăm blending pentru a desena un dreptunghi alb peste tot ecranul
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_DEPTH_TEST); // Să fie peste tot ce am desenat
+//* Draw IMGUI
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-    // Folosim un Shader simplu sau direct ImGui pentru a umple ecranul cu alb
-    // Cea mai simplă metodă fără a crea noi obiecte GPU este ImGui:
-    ImGui::GetForegroundDrawList()->AddRectFilled(
-        ImVec2(0, 0), 
-        ImVec2((float)currentWidth, (float)currentHeight), 
-        ImColor(1.0f, 1.0f, 1.0f, flashAlpha)
-    );
-
-    // Când albul a acoperit tot ecranul (alfa >= 1.0)
-    if (flashAlpha >= 1.0f) {
-        glfwSetWindowShouldClose(window, true); // Închidem fereastra
-    }
-}
-
-// --- [FINAL CADRU IMGUI] ---
-    // Fără aceste 2 linii la FINALUL buclei (înainte de swap), crapă
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
+//* BUFFER SWAP & EVENT POLLING
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
@@ -1685,7 +1491,6 @@ if (earthIsHit) {
 /************************
 ** SECTION 0: CLEAN UP **
 ************************/
-    // Calculăm scorul final înainte de shutdown
     float timePoints = survivalTime * 10.0f;
     int finalScore = static_cast<int>(gameScore + timePoints);
 
