@@ -1165,6 +1165,7 @@ int main(){
         return -1;
     }
     glfwMakeContextCurrent(window);
+    glfwSwapInterval(1);
 
 //* Initialize GLAD
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {

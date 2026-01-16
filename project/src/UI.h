@@ -3,15 +3,14 @@
 #include "imgui.h"
 
 namespace GameUI {
-    // Stil Sci-Fi: Culori neon și transparență
     void SetupSciFiStyle() {
         ImGuiStyle& style = ImGui::GetStyle();
         style.WindowRounding = 5.0f;
         style.FrameRounding = 10.0f;
-        style.Colors[ImGuiCol_WindowBg] = ImVec4(0.02f, 0.02f, 0.05f, 0.7f); // Fundal transparent închis
-        style.Colors[ImGuiCol_Button] = ImVec4(0.0f, 0.6f, 0.8f, 0.4f);       // Buton albastru transparent
+        style.Colors[ImGuiCol_WindowBg] = ImVec4(0.02f, 0.02f, 0.05f, 0.7f); 
+        style.Colors[ImGuiCol_Button] = ImVec4(0.0f, 0.6f, 0.8f, 0.4f);       
         style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.0f, 0.8f, 1.0f, 0.7f);
-        style.Colors[ImGuiCol_Text] = ImVec4(0.0f, 1.0f, 1.0f, 1.0f);        // Text Cyan (Neon)
+        style.Colors[ImGuiCol_Text] = ImVec4(0.0f, 1.0f, 1.0f, 1.0f);        
     }
 
     void RenderHUD(int score, float time) {
