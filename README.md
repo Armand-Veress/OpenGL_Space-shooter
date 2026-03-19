@@ -1,6 +1,6 @@
 # OpenGL university project following the Universal Rendering Pipeline structure.
 
-* **Project Objective:** OpenGL implementation of a Universal Real-Time Rendering Pipeline for an asteroid shooting space simulation.
+* **Project Objective:** OpenGL implementation of a Real-Time Rendering Pipeline for an asteroid shooting space simulation.
 
 ## Project Overview
 This project is an OpenGL 3.3+ application that demonstrates the core principles of the graphics pipeline. The player controls a spacecraft with the critical mission of defending Earth from an endless wave of incoming asteroids.
@@ -57,9 +57,8 @@ This project is an OpenGL 3.3+ application that demonstrates the core principles
      ```
      * **Ubuntu / Debian distributions:**
      ```bash
-     sudo apt install build-essential cmake libx11-dev libgl1-mesa-dev libxrandr-dev
+     sudo apt update && sudo apt install build-essential cmake libx11-dev libgl1-mesa-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
      ```
-     
   3\. Build & compile
   ```bash
   mkdir build
