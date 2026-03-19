@@ -34,7 +34,8 @@ This project is an OpenGL 3.3+ application that demonstrates the core principles
   1. Clone repository and navigate to root folder
      
 * **Windows:**
-  2. Build & compile
+  
+  2\. Build & compile
   ```powershell
   mkdir build
   cd build
@@ -42,13 +43,14 @@ This project is an OpenGL 3.3+ application that demonstrates the core principles
   cmake --build .
   cd ..
   ```
-  3. Run the game
+  3\. Run the game
   ```powershell
   ./bin/Debug/OpenGL_SpaceShooter.exe
   ```
   
 * **Linux:**
-  2. Install dependencies:
+  
+  2\. Install dependencies:
      * **Fedora distribution:**
      ```bash
      sudo dnf install @development-tools cmake gcc-cpp libX11-devel mesa-libGL-devel libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel
@@ -57,7 +59,8 @@ This project is an OpenGL 3.3+ application that demonstrates the core principles
      ```bash
      sudo apt install build-essential cmake libx11-dev libgl1-mesa-dev libxrandr-dev
      ```
-  3. Build & compile
+     
+  3\. Build & compile
   ```bash
   mkdir build
   cd build
@@ -65,7 +68,7 @@ This project is an OpenGL 3.3+ application that demonstrates the core principles
   cmake --build .
   cd ..
   ```
-  4. Run the game
+  4\. Run the game
   ```bash
   ./bin/OpenGL_SpaceShooter
   ```
