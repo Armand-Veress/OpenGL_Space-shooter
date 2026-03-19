@@ -1,3 +1,0 @@
-/home/armand/Dev/OpenGL/CGRMR/project/build/CMakeFiles/project.dir
-/home/armand/Dev/OpenGL/CGRMR/project/build/CMakeFiles/edit_cache.dir
-/home/armand/Dev/OpenGL/CGRMR/project/build/CMakeFiles/rebuild_cache.dir
